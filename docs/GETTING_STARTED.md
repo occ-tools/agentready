@@ -3,8 +3,13 @@
 ## Run Your First Scan
 
 ```bash
+npx agentready quickstart .
 npx agentready scan .
 ```
+
+`quickstart` does not write files. It detects the project package runner,
+existing AgentReady files, and GitHub Actions setup, then prints the commands
+that fit the current repository.
 
 The default text report shows a severity summary, top risks, detailed findings,
 and recommended next steps.
@@ -37,6 +42,13 @@ Generate a starter GitHub Actions workflow:
 
 ```bash
 agentready init . --with-ci
+```
+
+Validate the setup:
+
+```bash
+agentready config validate .
+agentready scan . --format markdown --output agentready-report.md
 ```
 
 ## Existing Projects

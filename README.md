@@ -4,6 +4,7 @@ Preflight security checks before you give Claude Code, Codex, Cursor, MCP
 tooling, or another AI coding agent access to a software project.
 
 ```bash
+npx agentready quickstart .
 npx agentready scan .
 ```
 
@@ -21,9 +22,10 @@ configuration.
 
 ## Install
 
-Run without installing:
+Start without installing:
 
 ```bash
+npx agentready quickstart .
 npx agentready scan .
 pnpm dlx agentready scan .
 bunx agentready scan .
@@ -45,6 +47,12 @@ agentready scan .
 ```
 
 ## Common Workflows
+
+Preview the recommended setup path without writing files:
+
+```bash
+agentready quickstart .
+```
 
 Initialize project boundaries:
 

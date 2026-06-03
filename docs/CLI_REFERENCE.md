@@ -6,6 +6,7 @@
 agentready scan [path]
 agentready baseline [path]
 agentready init [path]
+agentready quickstart [path]
 agentready doctor [path]
 agentready config validate [path]
 agentready list-rules
@@ -54,3 +55,14 @@ agentready init . --force
 ```
 
 Existing files are preserved unless `--force` is passed.
+
+## Quickstart
+
+```bash
+agentready quickstart .
+```
+
+`quickstart` is a zero-write onboarding command. It detects package-manager
+conventions, existing AgentReady setup files, and GitHub Actions workflows, then
+prints the recommended commands for setup, scanning, reports, and legacy
+baselines.

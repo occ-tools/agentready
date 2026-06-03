@@ -20,6 +20,7 @@
     "LICENSE"
   ],
   "scripts": {
+    "quickstart": "node ./bin/agentready.js quickstart",
     "scan": "node ./bin/agentready.js scan",
     "scan:ci": "node ./bin/agentready.js scan . --ci",
     "doctor": "node ./bin/agentready.js doctor",

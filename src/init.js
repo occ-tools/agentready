@@ -81,17 +81,19 @@ export async function runInit(root, options = {}) {
   const agentignore = buildAgentignore(preset);
   const config = buildConfig(preset);
 
-  await ensureFile(path.join(root, "AGENTS.md"), AGENTS_TEMPLATE, options, messages);
-  await ensureFile(path.join(root, ".agentignore"), agentignore, options, messages);
-  await ensureFile(path.join(root, ".agentready.json"), config, options, messages);
+  await ensureFile(root, "AGENTS.md", AGENTS_TEMPLATE, options, messages);
+  await ensureFile(root, ".agentignore", agentignore, options, messages);
+  await ensureFile(root, ".agentready.json", config, options, messages);
 
   if (options.withCi) {
-    await ensureFile(path.join(root, ".github", "workflows", "agentready.yml"), CI_WORKFLOW_TEMPLATE, options, messages);
+    await ensureFile(root, path.join(".github", "workflows", "agentready.yml"), CI_WORKFLOW_TEMPLATE, options, messages);
   }
 
   messages.push("");
   messages.push("Next steps:");
+  messages.push("- Run agentready config validate .");
   messages.push("- Run agentready scan .");
+  messages.push("- Save a shareable report with agentready scan . --format markdown --output agentready-report.md.");
   if (preset === "legacy") {
     messages.push("- Review current findings, then run agentready baseline . --output .agentready-baseline.json if needed.");
   }
@@ -122,20 +124,22 @@ function buildConfig(preset) {
   return `${JSON.stringify(config, null, 2)}\n`;
 }
 
-async function ensureFile(filePath, content, options, messages) {
+async function ensureFile(root, relativePath, content, options, messages) {
+  const filePath = path.join(root, relativePath);
   const existed = existsSync(filePath);
+  const displayPath = relativePath.replaceAll("\\", "/");
 
   if (existed && !options.force) {
-    messages.push(`Skipped existing ${filePath}`);
+    messages.push(`Skipped existing ${displayPath}`);
     return;
   }
 
   if (options.dryRun) {
-    messages.push(`${existed ? "Would overwrite" : "Would create"} ${filePath}`);
+    messages.push(`${existed ? "Would overwrite" : "Would create"} ${displayPath}`);
     return;
   }
 
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, content, "utf8");
-  messages.push(`${existed ? "Wrote" : "Created"} ${filePath}`);
+  messages.push(`${existed ? "Wrote" : "Created"} ${displayPath}`);
 }

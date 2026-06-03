@@ -172,6 +172,19 @@ test("CLI init dry-run does not write files and supports CI preview", async () =
   );
 
   assert.match(result.stdout, /Would create/);
+  assert.match(result.stdout, /Run agentready config validate \./);
   assert.equal(existsSync(path.join(root, "AGENTS.md")), false);
   assert.equal(existsSync(path.join(root, ".github", "workflows", "agentready.yml")), false);
+});
+
+test("CLI quickstart prints a zero-write setup path", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "agentready-"));
+  const result = await execFileAsync(process.execPath, [CLI_PATH, "quickstart", root], {
+    cwd: process.cwd()
+  });
+
+  assert.match(result.stdout, /AgentReady Quickstart/);
+  assert.match(result.stdout, /Configuration: missing/);
+  assert.match(result.stdout, /Preview setup: npx agentready init \. --dry-run --with-ci/);
+  assert.equal(existsSync(path.join(root, "AGENTS.md")), false);
 });

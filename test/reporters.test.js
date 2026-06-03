@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { formatSarif } from "../src/reporters.js";
+import { formatMarkdown, formatSarif, formatText } from "../src/reporters.js";
 
 test("formatSarif emits valid SARIF with rule and location data", () => {
   const sarif = JSON.parse(
@@ -29,4 +29,53 @@ test("formatSarif emits valid SARIF with rule and location data", () => {
   assert.equal(sarif.runs[0].results[0].level, "error");
   assert.equal(sarif.runs[0].results[0].partialFingerprints.primaryLocationLineHash, "abc123def456abc123def456");
   assert.equal(sarif.runs[0].results[0].locations[0].physicalLocation.region.startLine, 12);
+});
+
+test("formatText surfaces status, config, threshold, and review report next step", () => {
+  const output = formatText({
+    root: "/tmp/project",
+    scannedAt: "2026-06-02T00:00:00.000Z",
+    durationMs: 12,
+    filesScanned: 2,
+    config: {
+      configPath: "/tmp/project/.agentready.json",
+      failOn: "medium"
+    },
+    summary: { high: 0, medium: 1, low: 0, info: 0 },
+    findings: [
+      {
+        id: "package.lifecycle_script",
+        severity: "medium",
+        title: "Lifecycle script runs during install",
+        category: "package",
+        file: "package.json",
+        evidence: "postinstall",
+        recommendation: "Review the script before agent-assisted installs."
+      }
+    ]
+  });
+
+  assert.match(output, /Status: review recommended/);
+  assert.match(output, /Config: \/tmp\/project\/\.agentready\.json/);
+  assert.match(output, /CI fail threshold: medium/);
+  assert.match(output, /Save a markdown report/);
+});
+
+test("formatMarkdown surfaces ready status and quickstart next step for defaults", () => {
+  const output = formatMarkdown({
+    root: "/tmp/project",
+    scannedAt: "2026-06-02T00:00:00.000Z",
+    durationMs: 12,
+    filesScanned: 2,
+    config: {
+      configPath: null,
+      failOn: "medium"
+    },
+    summary: { high: 0, medium: 0, low: 0, info: 0 },
+    findings: []
+  });
+
+  assert.match(output, /- Status: ready/);
+  assert.match(output, /- Config: `\(defaults\)`/);
+  assert.match(output, /Run agentready quickstart \./);
 });

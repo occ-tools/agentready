@@ -12,6 +12,9 @@ Text output is the default. It includes:
 
 - scan duration
 - files scanned
+- status label
+- configuration path
+- CI failure threshold
 - severity summary
 - top risks
 - findings grouped by severity

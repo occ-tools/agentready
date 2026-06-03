@@ -6,6 +6,7 @@ import { applyCliOverrides, loadConfig, shouldFail } from "./config.js";
 import { usageError } from "./errors.js";
 import { runDoctor } from "./doctor.js";
 import { runInit } from "./init.js";
+import { runQuickstart } from "./onboarding.js";
 import { formatJson, formatMarkdown, formatSarif, formatText } from "./reporters.js";
 import { formatRules } from "./rules.js";
 import { scanProject } from "./scanner.js";
@@ -19,6 +20,7 @@ Usage:
                   [--quiet] [--verbose] [--no-color]
   agentready baseline [path] [--output .agentready-baseline.json]
   agentready init [path] [--force] [--dry-run] [--preset balanced|strict|legacy] [--with-ci]
+  agentready quickstart [path]
   agentready doctor [path]
   agentready config validate [path] [--config file]
   agentready list-rules [--format text|json|markdown] [--category name] [--severity level]
@@ -32,6 +34,7 @@ Examples:
   agentready scan . --ci --fail-on high
   agentready baseline . --output .agentready-baseline.json
   agentready init . --preset balanced --with-ci
+  agentready quickstart .
   agentready list-rules --category github-actions
 `;
 
@@ -60,6 +63,11 @@ export async function runCli(argv) {
 
   if (command === "doctor") {
     await handleDoctor(rest);
+    return;
+  }
+
+  if (command === "quickstart") {
+    await handleQuickstart(rest);
     return;
   }
 
@@ -167,6 +175,15 @@ async function handleDoctor(args) {
     configWarnings: loaded.warnings
   });
   console.log(formatText(result, { quiet: options.quiet, verbose: options.verbose }));
+}
+
+async function handleQuickstart(args) {
+  const options = parseOptions(args);
+  const target = path.resolve(options.positionals[0] || process.cwd());
+  const result = await runQuickstart(target);
+  for (const line of result.messages) {
+    console.log(line);
+  }
 }
 
 async function handleConfig(args) {

@@ -65,6 +65,9 @@ export function formatMarkdown(result) {
     `- Generated: ${result.scannedAt}`,
     `- Duration: ${formatDuration(result.durationMs)}`,
     `- Files scanned: ${result.filesScanned}`,
+    `- Status: ${statusLabel(result.summary)}`,
+    `- Config: \`${formatConfigPath(result.config)}\``,
+    `- CI fail threshold: ${result.config?.failOn || "medium"}`,
     result.baseline?.path ? `- Baseline suppressed: ${result.baseline.suppressed} of ${result.baseline.entries}` : null,
     "",
     "| Severity | Count |",
@@ -129,6 +132,9 @@ export function formatText(result, options = {}) {
     `Generated: ${result.scannedAt}`,
     `Duration: ${formatDuration(result.durationMs)}`,
     `Files scanned: ${result.filesScanned}`,
+    `Status: ${statusLabel(result.summary)}`,
+    `Config: ${formatConfigPath(result.config)}`,
+    `CI fail threshold: ${result.config?.failOn || "medium"}`,
     result.baseline?.path ? `Baseline suppressed: ${result.baseline.suppressed} of ${result.baseline.entries}` : null,
     `Summary: high=${result.summary.high} medium=${result.summary.medium} low=${result.summary.low} info=${result.summary.info}`,
     ""
@@ -211,6 +217,26 @@ function escapeMarkdown(value) {
   return String(value).replaceAll("|", "\\|").replaceAll("\n", " ");
 }
 
+function formatConfigPath(config = {}) {
+  return config.configPath || "(defaults)";
+}
+
+function statusLabel(summary) {
+  if (summary.high > 0) {
+    return "action required";
+  }
+
+  if (summary.medium > 0) {
+    return "review recommended";
+  }
+
+  if (summary.low > 0 || summary.info > 0) {
+    return "ready with notes";
+  }
+
+  return "ready";
+}
+
 export function toRelative(root, filePath) {
   return path.relative(root, filePath).replaceAll("\\", "/");
 }
@@ -252,13 +278,18 @@ function nextSteps(result) {
   }
 
   if (result.summary.high === 0 && result.summary.medium === 0 && result.summary.low === 0 && result.summary.info === 0) {
-    steps.push("Run agentready init . if this project does not already define agent boundaries.");
+    if (!result.config?.configPath) {
+      steps.push("Run agentready quickstart . to preview the recommended setup path.");
+    } else {
+      steps.push("Keep AgentReady in CI with agentready scan . --ci.");
+    }
     steps.push("Run agentready scan . --format markdown --output agentready-report.md when you need a shareable report.");
   }
 
   if (result.baseline?.suppressed > 0) {
     steps.push("Review baseline debt periodically; commit baseline files only after human review.");
   } else if (result.summary.high + result.summary.medium > 0) {
+    steps.push("Save a markdown report with agentready scan . --format markdown --output agentready-report.md for review.");
     steps.push("For legacy projects, create a reviewed baseline with agentready baseline . --output .agentready-baseline.json.");
   }
 
