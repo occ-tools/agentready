@@ -44,7 +44,7 @@ export function scanPackageJson(relativePath, basename, content) {
     if (scripts[lifecycle]) {
       findings.push({
         id: "package.lifecycle_script",
-        severity: lifecycle === "postinstall" ? "medium" : "low",
+        severity: "medium",
         title: `Package lifecycle script detected: ${lifecycle}`,
         file: relativePath,
         line: findLine(content, `"${lifecycle}"`),

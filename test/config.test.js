@@ -16,7 +16,8 @@ test("loadConfig applies ignore rules, ignore paths, severity overrides, and fai
       ignorePaths: ["ignored/**"],
       severityOverrides: {
         "agent.missing_agentignore": "info"
-      }
+      },
+      maxFileBytes: 1024
     }),
     "utf8"
   );
@@ -36,9 +37,27 @@ test("loadConfig applies ignore rules, ignore paths, severity overrides, and fai
   const missingAgentIgnore = result.findings.find((finding) => finding.id === "agent.missing_agentignore");
 
   assert.equal(config.failOn, "high");
+  assert.equal(config.maxFileBytes, 1024);
   assert.equal(shouldFail(result.summary, config.failOn), false);
   assert.equal(ids.includes("package.lifecycle_script"), false);
   assert.equal(missingAgentIgnore?.severity, "info");
+});
+
+test("loadConfig trims configured ignore arrays", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "agentready-"));
+  await writeFile(
+    path.join(root, ".agentready.json"),
+    JSON.stringify({
+      ignoreRules: [" agent.missing_agents_md "],
+      ignorePaths: [" ignored/** "]
+    }),
+    "utf8"
+  );
+
+  const { config } = await loadConfig(root);
+
+  assert.deepEqual(config.ignoreRules, ["agent.missing_agents_md"]);
+  assert.deepEqual(config.ignorePaths, ["ignored/**"]);
 });
 
 test("applyCliOverrides augments loaded config", () => {
@@ -47,23 +66,64 @@ test("applyCliOverrides augments loaded config", () => {
       ignorePaths: [],
       ignoreRules: [],
       severityOverrides: {},
-      failOn: "medium"
+      failOn: "medium",
+      maxFileBytes: 524288
     },
     {
       ignorePaths: ["tmp/**"],
       ignoreRules: ["agent.missing_agents_md"],
-      failOn: "none"
+      failOn: "none",
+      maxFileSize: "4096"
     }
   );
 
   assert.deepEqual(config.ignorePaths, ["tmp/**"]);
   assert.deepEqual(config.ignoreRules, ["agent.missing_agents_md"]);
   assert.equal(config.failOn, "none");
+  assert.equal(config.maxFileBytes, 4096);
+});
+
+test("applyCliOverrides trims CLI ignore values", () => {
+  const config = applyCliOverrides(
+    {
+      ignorePaths: [],
+      ignoreRules: [],
+      severityOverrides: {},
+      failOn: "medium",
+      maxFileBytes: 524288
+    },
+    {
+      ignorePaths: [" tmp/** "],
+      ignoreRules: [" agent.missing_agents_md "]
+    }
+  );
+
+  assert.deepEqual(config.ignorePaths, ["tmp/**"]);
+  assert.deepEqual(config.ignoreRules, ["agent.missing_agents_md"]);
+});
+
+test("loadConfig warns on invalid maxFileBytes", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "agentready-"));
+  await writeFile(
+    path.join(root, ".agentready.json"),
+    JSON.stringify({
+      maxFileBytes: 0
+    }),
+    "utf8"
+  );
+
+  const { config, warnings } = await loadConfig(root);
+
+  assert.equal(config.maxFileBytes, 524288);
+  assert.deepEqual(warnings, ["maxFileBytes must be a positive integer and was ignored."]);
 });
 
 test("matchesAnyPath supports exact, directory, and glob-style patterns", () => {
   assert.equal(matchesAnyPath(["secrets"], "secrets/prod.env"), true);
+  assert.equal(matchesAnyPath(["**/*.pem"], "private.pem"), true);
   assert.equal(matchesAnyPath(["**/*.pem"], "config/private.pem"), true);
+  assert.equal(matchesAnyPath(["**/secrets/**"], "secrets/prod.env"), true);
+  assert.equal(matchesAnyPath(["**/secrets/**"], "config/secrets/prod.env"), true);
   assert.equal(matchesAnyPath(["src/*.js"], "src/index.js"), true);
   assert.equal(matchesAnyPath(["src/*.js"], "src/nested/index.js"), false);
 });
@@ -87,4 +147,31 @@ test("loadConfig reports unknown rule ids as warnings", async () => {
     "Unknown rule id in ignoreRules: missing.rule",
     "Unknown rule id in severityOverrides: also.missing"
   ]);
+});
+
+test("loadConfig reports unknown top-level fields", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "agentready-"));
+  await writeFile(
+    path.join(root, ".agentready.json"),
+    JSON.stringify({
+      failon: "high",
+      failOn: "medium"
+    }),
+    "utf8"
+  );
+
+  const { config, warnings } = await loadConfig(root);
+
+  assert.equal(config.failOn, "medium");
+  assert.deepEqual(warnings, ["Unknown configuration field ignored: failon"]);
+});
+
+test("loadConfig handles non-object configuration roots", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "agentready-"));
+  await writeFile(path.join(root, ".agentready.json"), "[]", "utf8");
+
+  const { config, warnings } = await loadConfig(root);
+
+  assert.equal(config.failOn, "medium");
+  assert.deepEqual(warnings, ["Configuration root must be an object; defaults were used."]);
 });

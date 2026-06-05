@@ -1,38 +1,38 @@
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { SEVERITIES } from "./constants.js";
+import { RULE_CATALOG } from "./rules.js";
+
+const TOOL_INFORMATION_URI = "https://github.com/wangjiehu/agentready";
+const RULE_HELP_URI = `${TOOL_INFORMATION_URI}/blob/main/docs/RULES.md`;
+const SKIP_REASON_LABELS = {
+  ignoredPath: "ignored-path",
+  ignoredDirectory: "ignored-directory",
+  oversized: "oversized",
+  binary: "binary",
+  unsupportedType: "unsupported-type",
+  unreadableDirectory: "unreadable-directory",
+  unreadableFile: "unreadable-file"
+};
 
 export function formatJson(result) {
-  return `${JSON.stringify(result, null, 2)}\n`;
+  const enriched = result.nextSteps ? result : { ...result, nextSteps: nextSteps(result) };
+  return `${JSON.stringify(enriched, null, 2)}\n`;
 }
 
 export function formatSarif(result) {
-  const rules = new Map();
+  const rules = new Map(RULE_CATALOG.map((rule) => [rule.id, toSarifRule(rule)]));
 
   for (const finding of result.findings) {
     if (!rules.has(finding.id)) {
-      rules.set(finding.id, {
+      rules.set(finding.id, toSarifRule({
         id: finding.id,
-        name: finding.title,
-        shortDescription: {
-          text: finding.title
-        },
-        fullDescription: {
-          text: finding.recommendation
-        },
-        help: {
-          text: finding.why || finding.recommendation,
-          markdown: `${finding.why || finding.recommendation}\n\n${finding.recommendation}`
-        },
-        defaultConfiguration: {
-          level: toSarifLevel(finding.severity)
-        },
-        properties: {
-          category: finding.category || "general",
-          precision: finding.severity === "info" ? "medium" : "high",
-          severity: finding.severity,
-          tags: [finding.category || "general", finding.severity]
-        }
-      });
+        defaultSeverity: finding.severity,
+        category: finding.category || "general",
+        description: finding.title,
+        recommendation: finding.recommendation,
+        why: finding.why || finding.recommendation
+      }));
     }
   }
 
@@ -44,7 +44,25 @@ export function formatSarif(result) {
         tool: {
           driver: {
             name: "AgentReady",
+            fullName: "AgentReady preflight security scanner",
+            version: result.toolVersion || "0.1.0",
+            semanticVersion: result.toolVersion || "0.1.0",
+            informationUri: TOOL_INFORMATION_URI,
             rules: [...rules.values()]
+          }
+        },
+        automationDetails: {
+          id: "agentready/scan"
+        },
+        invocations: [
+          {
+            executionSuccessful: true,
+            endTimeUtc: result.scannedAt
+          }
+        ],
+        originalUriBaseIds: {
+          PROJECTROOT: {
+            uri: toSarifBaseUri(result.root)
           }
         },
         results: result.findings.map((finding) => toSarifResult(finding))
@@ -55,7 +73,8 @@ export function formatSarif(result) {
   return `${JSON.stringify(sarif, null, 2)}\n`;
 }
 
-export function formatMarkdown(result) {
+export function formatMarkdown(result, options = {}) {
+  const groupBy = options.groupBy || result.report?.groupBy || "severity";
   const lines = [
     "# AgentReady Security Report",
     "",
@@ -65,9 +84,11 @@ export function formatMarkdown(result) {
     `- Generated: ${result.scannedAt}`,
     `- Duration: ${formatDuration(result.durationMs)}`,
     `- Files scanned: ${result.filesScanned}`,
+    totalSkipped(result.filesSkipped) > 0 ? `- Files skipped: ${formatSkippedFiles(result.filesSkipped)}` : null,
     `- Status: ${statusLabel(result.summary)}`,
     `- Config: \`${formatConfigPath(result.config)}\``,
     `- CI fail threshold: ${result.config?.failOn || "medium"}`,
+    result.report ? `- Findings displayed: ${result.report.displayedFindings} of ${result.report.totalFindings}` : null,
     result.baseline?.path ? `- Baseline suppressed: ${result.baseline.suppressed} of ${result.baseline.entries}` : null,
     "",
     "| Severity | Count |",
@@ -78,8 +99,14 @@ export function formatMarkdown(result) {
 
   appendConfigWarnings(lines, result, true);
 
+  if (result.report?.summaryOnly) {
+    lines.push("## Findings", "", "Findings hidden by `--summary-only`.", "");
+    appendNextSteps(lines, result, true);
+    return `${lines.join("\n")}\n`;
+  }
+
   if (result.findings.length === 0) {
-    lines.push("## Result", "", "No findings detected.", "");
+    lines.push("## Result", "", result.report?.totalFindings > 0 ? "No findings displayed by the current report limit." : "No findings detected.", "");
     appendNextSteps(lines, result, true);
     return `${lines.join("\n")}\n`;
   }
@@ -90,31 +117,14 @@ export function formatMarkdown(result) {
   }
   lines.push("");
 
-  lines.push("## Findings", "");
-  for (const severity of SEVERITIES) {
-    const findings = result.findings.filter((finding) => finding.severity === severity);
-    if (findings.length === 0) {
-      continue;
-    }
+  if (groupBy === "category") {
+    appendMarkdownFindingsByCategory(lines, result.findings);
+  } else {
+    appendMarkdownFindingsBySeverity(lines, result.findings);
+  }
 
-    lines.push(`### ${severity.toUpperCase()}`, "");
-    for (const finding of findings) {
-      lines.push(`#### ${finding.title}`);
-      lines.push("");
-      lines.push(`- Rule: \`${finding.id}\``);
-      lines.push(`- Category: ${finding.category || "general"}`);
-      if (finding.file) {
-        lines.push(`- Location: \`${formatLocation(finding)}\``);
-      }
-      if (finding.evidence) {
-        lines.push(`- Evidence: ${escapeMarkdown(finding.evidence)}`);
-      }
-      if (finding.why) {
-        lines.push(`- Why it matters: ${escapeMarkdown(finding.why)}`);
-      }
-      lines.push(`- Recommendation: ${escapeMarkdown(finding.recommendation)}`);
-      lines.push("");
-    }
+  if (result.report?.omittedFindings > 0) {
+    lines.push(`_${result.report.omittedFindings} finding(s) hidden by the current report limit._`, "");
   }
 
   appendNextSteps(lines, result, true);
@@ -132,9 +142,11 @@ export function formatText(result, options = {}) {
     `Generated: ${result.scannedAt}`,
     `Duration: ${formatDuration(result.durationMs)}`,
     `Files scanned: ${result.filesScanned}`,
+    totalSkipped(result.filesSkipped) > 0 ? `Files skipped: ${formatSkippedFiles(result.filesSkipped)}` : null,
     `Status: ${statusLabel(result.summary)}`,
     `Config: ${formatConfigPath(result.config)}`,
     `CI fail threshold: ${result.config?.failOn || "medium"}`,
+    result.report ? `Findings displayed: ${result.report.displayedFindings} of ${result.report.totalFindings}` : null,
     result.baseline?.path ? `Baseline suppressed: ${result.baseline.suppressed} of ${result.baseline.entries}` : null,
     `Summary: high=${result.summary.high} medium=${result.summary.medium} low=${result.summary.low} info=${result.summary.info}`,
     ""
@@ -142,8 +154,14 @@ export function formatText(result, options = {}) {
 
   appendConfigWarnings(lines, result, false);
 
+  if (result.report?.summaryOnly) {
+    lines.push("Findings hidden by --summary-only.", "");
+    appendNextSteps(lines, result, false);
+    return lines.join("\n").trimEnd();
+  }
+
   if (result.findings.length === 0) {
-    lines.push("No findings detected.", "");
+    lines.push(result.report?.totalFindings > 0 ? "No findings displayed by the current report limit." : "No findings detected.", "");
     appendNextSteps(lines, result, false);
     return lines.join("\n");
   }
@@ -154,35 +172,103 @@ export function formatText(result, options = {}) {
   }
   lines.push("");
 
-  for (const severity of SEVERITIES) {
-    const findings = result.findings.filter((finding) => finding.severity === severity);
-    if (findings.length === 0) {
-      continue;
-    }
+  if ((options.groupBy || result.report?.groupBy) === "category") {
+    appendTextFindingsByCategory(lines, result.findings, options);
+  } else {
+    appendTextFindingsBySeverity(lines, result.findings, options);
+  }
 
-    lines.push(`${severity.toUpperCase()} (${findings.length})`);
-    for (const finding of findings) {
-      lines.push(`- ${finding.title}`);
-      lines.push(`  Rule: ${finding.id}`);
-      lines.push(`  Category: ${finding.category || "general"}`);
-      if (finding.file) {
-        lines.push(`  Location: ${formatLocation(finding)}`);
-      }
-      if (finding.evidence) {
-        lines.push(`  Evidence: ${finding.evidence}`);
-      }
-      if (finding.why) {
-        lines.push(`  Why: ${finding.why}`);
-      }
-      lines.push(`  Fix: ${finding.recommendation}`);
-      if (options.verbose && finding.fingerprint) {
-        lines.push(`  Fingerprint: ${finding.fingerprint}`);
-      }
-    }
-    lines.push("");
+  if (result.report?.omittedFindings > 0) {
+    lines.push(`${result.report.omittedFindings} finding(s) hidden by the current report limit.`, "");
   }
 
   appendNextSteps(lines, result, false);
+  return lines.join("\n").trimEnd();
+}
+
+export function formatBaselineDiff(diff, format = "text") {
+  if (format === "json") {
+    return `${JSON.stringify(diff, null, 2)}\n`;
+  }
+
+  if (format === "markdown") {
+    const lines = [
+      "# AgentReady Baseline Diff",
+      "",
+      "## Summary",
+      "",
+      `- Baseline file: \`${diff.baselinePath}\``,
+      `- Baseline entries: ${diff.summary.baseline}`,
+      `- Current findings: ${diff.summary.current}`,
+      `- Matched: ${diff.summary.matched}`,
+      `- New: ${diff.summary.new}`,
+      `- Stale: ${diff.summary.stale}`,
+      diff.summary.severity ? `- New severity: ${formatSeveritySummary(diff.summary.severity.new)}` : null,
+      diff.summary.severity ? `- Stale severity: ${formatSeveritySummary(diff.summary.severity.stale)}` : null,
+      ""
+    ].filter((line) => line !== null);
+
+    appendBaselineDiffSection(lines, "New Findings", diff.newFindings, true);
+    appendBaselineDiffSection(lines, "Stale Baseline Entries", diff.staleFindings, true);
+    return `${lines.join("\n")}\n`;
+  }
+
+  const lines = [
+    "AgentReady Baseline Diff",
+    `Baseline file: ${diff.baselinePath}`,
+    `Baseline entries: ${diff.summary.baseline}`,
+    `Current findings: ${diff.summary.current}`,
+    `Matched: ${diff.summary.matched}`,
+    `New: ${diff.summary.new}`,
+    `Stale: ${diff.summary.stale}`,
+    diff.summary.severity ? `New severity: ${formatSeveritySummary(diff.summary.severity.new)}` : null,
+    diff.summary.severity ? `Stale severity: ${formatSeveritySummary(diff.summary.severity.stale)}` : null,
+    ""
+  ].filter((line) => line !== null);
+
+  appendBaselineDiffSection(lines, "New findings", diff.newFindings, false);
+  appendBaselineDiffSection(lines, "Stale baseline entries", diff.staleFindings, false);
+  return lines.join("\n").trimEnd();
+}
+
+export function formatBaselineDebt(debt, format = "text") {
+  if (format === "json") {
+    return `${JSON.stringify(debt, null, 2)}\n`;
+  }
+
+  if (format === "markdown") {
+    const lines = [
+      "# AgentReady Baseline Debt",
+      "",
+      "## Summary",
+      "",
+      `- Baseline file: \`${debt.baselinePath}\``,
+      `- Entries: ${debt.entries}`,
+      `- Severity: ${formatSeveritySummary(debt.severity)}`,
+      `- Oldest age: ${formatAge(debt.oldestAgeDays)}`,
+      `- Average age: ${formatAge(debt.averageAgeDays)}`,
+      ""
+    ];
+
+    appendDebtCounts(lines, "Rules", debt.byRule, true);
+    appendDebtCounts(lines, "Files", debt.byFile, true);
+    appendDebtFindings(lines, debt.findings, true);
+    return `${lines.join("\n")}\n`;
+  }
+
+  const lines = [
+    "AgentReady Baseline Debt",
+    `Baseline file: ${debt.baselinePath}`,
+    `Entries: ${debt.entries}`,
+    `Severity: ${formatSeveritySummary(debt.severity)}`,
+    `Oldest age: ${formatAge(debt.oldestAgeDays)}`,
+    `Average age: ${formatAge(debt.averageAgeDays)}`,
+    ""
+  ];
+
+  appendDebtCounts(lines, "Rules", debt.byRule, false);
+  appendDebtCounts(lines, "Files", debt.byFile, false);
+  appendDebtFindings(lines, debt.findings, false);
   return lines.join("\n").trimEnd();
 }
 
@@ -204,6 +290,173 @@ function appendNextSteps(lines, result, markdown) {
   for (const step of nextSteps(result)) {
     lines.push(`- ${step}`);
   }
+}
+
+function appendMarkdownFindingsBySeverity(lines, findings) {
+  lines.push("## Findings", "");
+  for (const severity of SEVERITIES) {
+    const group = findings.filter((finding) => finding.severity === severity);
+    if (group.length === 0) {
+      continue;
+    }
+
+    lines.push(`### ${severity.toUpperCase()}`, "");
+    for (const finding of group) {
+      appendMarkdownFinding(lines, finding);
+    }
+  }
+}
+
+function appendMarkdownFindingsByCategory(lines, findings) {
+  lines.push("## Findings By Category", "");
+  for (const category of categoriesFor(findings)) {
+    const group = sortFindings(findings.filter((finding) => (finding.category || "general") === category));
+    lines.push(`### ${category}`, "");
+    for (const finding of group) {
+      appendMarkdownFinding(lines, finding);
+    }
+  }
+}
+
+function appendMarkdownFinding(lines, finding) {
+  lines.push(`#### ${finding.title}`);
+  lines.push("");
+  lines.push(`- Rule: \`${finding.id}\``);
+  lines.push(`- Severity: ${finding.severity}`);
+  lines.push(`- Category: ${finding.category || "general"}`);
+  if (finding.file) {
+    lines.push(`- Location: \`${formatLocation(finding)}\``);
+  }
+  if (finding.evidence) {
+    lines.push(`- Evidence: ${escapeMarkdown(finding.evidence)}`);
+  }
+  if (finding.why) {
+    lines.push(`- Why it matters: ${escapeMarkdown(finding.why)}`);
+  }
+  lines.push(`- Recommendation: ${escapeMarkdown(finding.recommendation)}`);
+  lines.push("");
+}
+
+function appendTextFindingsBySeverity(lines, findings, options) {
+  for (const severity of SEVERITIES) {
+    const group = findings.filter((finding) => finding.severity === severity);
+    if (group.length === 0) {
+      continue;
+    }
+
+    lines.push(`${severity.toUpperCase()} (${group.length})`);
+    for (const finding of group) {
+      appendTextFinding(lines, finding, options);
+    }
+    lines.push("");
+  }
+}
+
+function appendTextFindingsByCategory(lines, findings, options) {
+  for (const category of categoriesFor(findings)) {
+    const group = sortFindings(findings.filter((finding) => (finding.category || "general") === category));
+    lines.push(`${category} (${group.length})`);
+    for (const finding of group) {
+      appendTextFinding(lines, finding, options);
+    }
+    lines.push("");
+  }
+}
+
+function appendTextFinding(lines, finding, options) {
+  lines.push(`- ${finding.title}`);
+  lines.push(`  Rule: ${finding.id}`);
+  lines.push(`  Severity: ${finding.severity}`);
+  lines.push(`  Category: ${finding.category || "general"}`);
+  if (finding.file) {
+    lines.push(`  Location: ${formatLocation(finding)}`);
+  }
+  if (finding.evidence) {
+    lines.push(`  Evidence: ${finding.evidence}`);
+  }
+  if (finding.why) {
+    lines.push(`  Why: ${finding.why}`);
+  }
+  lines.push(`  Fix: ${finding.recommendation}`);
+  if (options.verbose && finding.fingerprint) {
+    lines.push(`  Fingerprint: ${finding.fingerprint}`);
+  }
+}
+
+function appendBaselineDiffSection(lines, title, findings, markdown) {
+  if (markdown) {
+    lines.push(`## ${title}`, "");
+    if (findings.length === 0) {
+      lines.push("None.", "");
+      return;
+    }
+    for (const finding of findings) {
+      lines.push(`- **${finding.severity.toUpperCase()}** \`${formatLocation(finding)}\` ${finding.title} (\`${finding.id}\`)`);
+    }
+    lines.push("");
+    return;
+  }
+
+  lines.push(`${title}:`);
+  if (findings.length === 0) {
+    lines.push("- none", "");
+    return;
+  }
+  for (const finding of findings) {
+    lines.push(`- [${finding.severity.toUpperCase()}] ${formatLocation(finding)} ${finding.title} (${finding.id})`);
+  }
+  lines.push("");
+}
+
+function appendDebtCounts(lines, title, counts, markdown) {
+  lines.push(markdown ? `## ${title}` : `${title}:`, "");
+  if (!counts?.length) {
+    lines.push("- none", "");
+    return;
+  }
+
+  for (const item of counts) {
+    lines.push(`- ${markdown ? `\`${escapeMarkdown(item.key)}\`` : item.key}: ${item.count}`);
+  }
+  lines.push("");
+}
+
+function appendDebtFindings(lines, findings, markdown) {
+  lines.push(markdown ? "## Findings" : "Findings:", "");
+  if (!findings?.length) {
+    lines.push("- none", "");
+    return;
+  }
+
+  for (const finding of findings) {
+    const age = formatAge(finding.ageDays);
+    const location = formatLocation(finding);
+    if (markdown) {
+      lines.push(`- **${finding.severity.toUpperCase()}** \`${location}\` ${finding.title} (\`${finding.id}\`, age ${age})`);
+    } else {
+      lines.push(`- [${finding.severity.toUpperCase()}] ${location} ${finding.title} (${finding.id}, age ${age})`);
+    }
+  }
+  lines.push("");
+}
+
+function categoriesFor(findings) {
+  return [...new Set(findings.map((finding) => finding.category || "general"))].sort();
+}
+
+function sortFindings(findings) {
+  const rank = new Map(SEVERITIES.map((severity, index) => [severity, index]));
+  return [...findings].sort((left, right) => {
+    const severityDelta = rank.get(left.severity) - rank.get(right.severity);
+    if (severityDelta !== 0) {
+      return severityDelta;
+    }
+    const fileDelta = String(left.file || "").localeCompare(String(right.file || ""));
+    if (fileDelta !== 0) {
+      return fileDelta;
+    }
+    return (left.line || 0) - (right.line || 0);
+  });
 }
 
 function formatLocation(finding) {
@@ -253,6 +506,28 @@ function formatDuration(durationMs) {
   return `${(durationMs / 1000).toFixed(1)}s`;
 }
 
+function totalSkipped(filesSkipped = {}) {
+  return Object.values(filesSkipped).reduce((total, count) => total + (Number(count) || 0), 0);
+}
+
+function formatSkippedFiles(filesSkipped = {}) {
+  const total = totalSkipped(filesSkipped);
+  const details = Object.entries(filesSkipped)
+    .filter(([, count]) => count > 0)
+    .map(([reason, count]) => `${SKIP_REASON_LABELS[reason] || reason}=${count}`)
+    .join(" ");
+
+  return details ? `${total} (${details})` : String(total);
+}
+
+function formatSeveritySummary(summary = {}) {
+  return `high=${summary.high || 0} medium=${summary.medium || 0} low=${summary.low || 0} info=${summary.info || 0}`;
+}
+
+function formatAge(ageDays) {
+  return typeof ageDays === "number" ? `${ageDays}d` : "unknown";
+}
+
 function topRisks(findings, limit = 5) {
   const rank = new Map(SEVERITIES.map((severity, index) => [severity, index]));
   return [...findings]
@@ -268,6 +543,10 @@ function topRisks(findings, limit = 5) {
 
 function nextSteps(result) {
   const steps = [];
+
+  if (result.configWarnings?.length) {
+    steps.push("Fix configuration warnings before relying on CI gating; run agentready config validate .");
+  }
 
   if (result.summary.high > 0) {
     steps.push("Fix high severity findings before giving an AI agent broad repository access.");
@@ -326,7 +605,8 @@ function toSarifResult(finding) {
       {
         physicalLocation: {
           artifactLocation: {
-            uri: finding.file
+            uri: finding.file,
+            uriBaseId: "PROJECTROOT"
           }
         }
       }
@@ -340,6 +620,39 @@ function toSarifResult(finding) {
   }
 
   return result;
+}
+
+function toSarifBaseUri(root) {
+  const resolved = path.resolve(root || ".");
+  const href = pathToFileURL(resolved).href;
+  return href.endsWith("/") ? href : `${href}/`;
+}
+
+function toSarifRule(rule) {
+  return {
+    id: rule.id,
+    name: rule.id,
+    shortDescription: {
+      text: rule.description
+    },
+    fullDescription: {
+      text: rule.recommendation
+    },
+    helpUri: RULE_HELP_URI,
+    help: {
+      text: rule.why || rule.recommendation,
+      markdown: `${rule.why || rule.recommendation}\n\n${rule.recommendation}`
+    },
+    defaultConfiguration: {
+      level: toSarifLevel(rule.defaultSeverity)
+    },
+    properties: {
+      category: rule.category || "general",
+      precision: rule.defaultSeverity === "info" ? "medium" : "high",
+      severity: rule.defaultSeverity,
+      tags: [rule.category || "general", rule.defaultSeverity]
+    }
+  };
 }
 
 function toSarifLevel(severity) {

@@ -21,6 +21,9 @@ export const DEFAULT_IGNORED_DIRS = new Set([
 
 export const TEXT_EXTENSIONS = new Set([
   ".cjs",
+  ".bash",
+  ".bat",
+  ".cmd",
   ".conf",
   ".env",
   ".ini",
@@ -39,7 +42,20 @@ export const TEXT_EXTENSIONS = new Set([
   ".tsx",
   ".txt",
   ".yaml",
-  ".yml"
+  ".yml",
+  ".zsh"
+]);
+
+export const TEXT_FILE_NAMES = new Set([
+  ".gitattributes",
+  ".gitignore",
+  ".npmignore",
+  "Dockerfile",
+  "Justfile",
+  "Makefile",
+  "Taskfile",
+  "dockerfile",
+  "makefile"
 ]);
 
 export const MAX_FILE_BYTES = 512 * 1024;

@@ -1,11 +1,21 @@
 # Paths AI coding agents should avoid unless explicitly approved.
 .env
 .env.*
+.envrc
+.npmrc
+.pypirc
+.netrc
 *.pem
 *.key
 *.p12
 *.pfx
-*secret*
-*credential*
+secrets/
+credentials/
+**/secrets/**
+**/credentials/**
+**/*secret*.env
+**/*credential*.env
 private/
 backups/
+**/private/**
+**/backups/**

@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { formatCommandPath } from "./command-path.js";
 import { usageError } from "./errors.js";
 
 const PRESETS = new Set(["balanced", "strict", "legacy"]);
@@ -19,26 +20,48 @@ const AGENTS_TEMPLATE = `# AGENTS.md
 
 - .env
 - .env.*
+- .envrc
+- .npmrc
+- .pypirc
+- .netrc
 - **/*.pem
 - **/*.key
-- **/*secret*
-- **/*credential*
+- **/*.p12
+- **/*.pfx
+- secrets/
+- credentials/
+- **/secrets/**
+- **/credentials/**
+- **/*secret*.env
+- **/*credential*.env
 - private/
 - backups/
+- **/private/**
+- **/backups/**
 `;
 
 const AGENTIGNORE_BASE = [
   "# Paths AI coding agents should avoid unless explicitly approved.",
   ".env",
   ".env.*",
+  ".envrc",
+  ".npmrc",
+  ".pypirc",
+  ".netrc",
   "*.pem",
   "*.key",
   "*.p12",
   "*.pfx",
-  "*secret*",
-  "*credential*",
+  "secrets/",
+  "credentials/",
+  "**/secrets/**",
+  "**/credentials/**",
+  "**/*secret*.env",
+  "**/*credential*.env",
   "private/",
-  "backups/"
+  "backups/",
+  "**/private/**",
+  "**/backups/**"
 ];
 
 const STRICT_AGENTIGNORE_EXTRA = ["*.sqlite", "*.db", "*.dump", "data/private/", "infra/secrets/"];
@@ -58,15 +81,15 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 20
       - run: npx agentready scan . --ci --format sarif --output agentready.sarif
-      - uses: github/codeql-action/upload-sarif@v3
-        if: always()
+      - uses: github/codeql-action/upload-sarif@v4
+        if: \${{ !cancelled() }}
         with:
           sarif_file: agentready.sarif
 `;
@@ -78,6 +101,7 @@ export async function runInit(root, options = {}) {
   }
 
   const messages = [];
+  const targetArg = formatCommandPath(root);
   const agentignore = buildAgentignore(preset);
   const config = buildConfig(preset);
 
@@ -91,14 +115,14 @@ export async function runInit(root, options = {}) {
 
   messages.push("");
   messages.push("Next steps:");
-  messages.push("- Run agentready config validate .");
-  messages.push("- Run agentready scan .");
-  messages.push("- Save a shareable report with agentready scan . --format markdown --output agentready-report.md.");
+  messages.push(`- Run agentready config validate ${targetArg}`);
+  messages.push(`- Run agentready scan ${targetArg}`);
+  messages.push(`- Save a shareable report with agentready scan ${targetArg} --format markdown --output agentready-report.md.`);
   if (preset === "legacy") {
-    messages.push("- Review current findings, then run agentready baseline . --output .agentready-baseline.json if needed.");
+    messages.push(`- Review current findings, then run agentready baseline ${targetArg} if needed.`);
   }
   if (!options.withCi) {
-    messages.push("- Add CI later with agentready init . --with-ci.");
+    messages.push(`- Add CI later with agentready init ${targetArg} --with-ci.`);
   }
 
   return { messages };
@@ -114,11 +138,13 @@ function buildAgentignore(preset) {
 
 function buildConfig(preset) {
   const config = {
+    $schema: "https://raw.githubusercontent.com/wangjiehu/agentready/main/schema/agentready.schema.json",
     baselinePath: null,
     failOn: preset === "legacy" ? "high" : "medium",
     ignorePaths: preset === "strict" ? ["fixtures/**", "examples/**"] : [],
     ignoreRules: [],
-    severityOverrides: {}
+    severityOverrides: {},
+    maxFileBytes: 524288
   };
 
   return `${JSON.stringify(config, null, 2)}\n`;

@@ -49,6 +49,7 @@ Validate the setup:
 ```bash
 agentready config validate .
 agentready scan . --format markdown --output agentready-report.md
+agentready scan . --format markdown --group-by category --max-findings 25
 ```
 
 ## Existing Projects
@@ -58,8 +59,11 @@ block only new findings in CI.
 
 ```bash
 agentready scan .
-agentready baseline . --output .agentready-baseline.json
+agentready baseline .
+agentready baseline diff .
+agentready debt .
 agentready scan . --baseline .agentready-baseline.json --ci
+agentready baseline prune .
 ```
 
 Commit the baseline only after a human review.

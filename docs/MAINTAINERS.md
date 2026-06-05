@@ -16,6 +16,8 @@ Before merging, check:
 
 - The change has a clear user impact.
 - `npm run verify` passes.
+- `npm run market:check` passes for release, package, workflow, or public
+  documentation changes.
 - Rule ids remain stable unless a breaking change is intentional and documented.
 - New or changed rules include tests for true positives and practical false-positive boundaries.
 - CLI output remains useful for both humans and CI.
@@ -35,6 +37,7 @@ Before merging, check:
 A release is ready when:
 
 - `npm run verify` passes locally and in GitHub Actions.
+- `npm run market:check` passes locally before creating the GitHub release.
 - The changelog describes user-visible changes.
 - The npm tarball contains runtime files, docs, schema, and license.
 - The composite GitHub Action smoke test passes.
@@ -44,7 +47,9 @@ A release is ready when:
 
 - Keep runtime dependencies at zero unless a dependency removes substantial risk or complexity.
 - Prefer standard Node.js APIs for filesystem, JSON, and process handling.
-- Review Dependabot pull requests weekly, but do not merge dependency updates without `npm run verify`.
+- Review Dependabot pull requests weekly, but do not merge dependency updates
+  without `npm run verify`; use `npm run market:check` for GitHub Actions,
+  release, package, or public documentation updates.
 
 ## Security Handling
 

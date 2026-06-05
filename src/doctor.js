@@ -51,6 +51,7 @@ export async function runDoctor(root, options = {}) {
     filesScanned: result.filesScanned,
     config: result.config,
     configWarnings: result.configWarnings,
+    baseline: result.baseline,
     findings,
     summary: summarize(findings)
   };

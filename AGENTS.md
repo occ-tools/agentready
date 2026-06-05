@@ -12,9 +12,21 @@
 
 - .env
 - .env.*
+- .envrc
+- .npmrc
+- .pypirc
+- .netrc
 - **/*.pem
 - **/*.key
-- **/*secret*
-- **/*credential*
+- **/*.p12
+- **/*.pfx
+- secrets/
+- credentials/
+- **/secrets/**
+- **/credentials/**
+- **/*secret*.env
+- **/*credential*.env
 - private/
 - backups/
+- **/private/**
+- **/backups/**

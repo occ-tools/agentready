@@ -1,11 +1,13 @@
 import { existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import path from "node:path";
+import { formatCommandPath } from "./command-path.js";
 import { CONFIG_FILE_NAMES } from "./config.js";
 
 export async function runQuickstart(root) {
   const packageManager = detectPackageManager(root);
   const runner = packageManager.runner;
+  const targetArg = formatCommandPath(root);
   const setup = await detectSetup(root);
   const needsSetup = !setup.hasConfig || !setup.hasAgents || !setup.hasAgentignore;
   const needsCi = !setup.hasGitHubActions;
@@ -27,18 +29,18 @@ export async function runQuickstart(root) {
 
   if (needsSetup) {
     const ciFlag = needsCi ? " --with-ci" : "";
-    lines.push(`- Preview setup: ${runner} agentready init . --dry-run${ciFlag}`);
-    lines.push(`- Create setup files: ${runner} agentready init .${ciFlag}`);
+    lines.push(`- Preview setup: ${runner} agentready init ${targetArg} --dry-run${ciFlag}`);
+    lines.push(`- Create setup files: ${runner} agentready init ${targetArg}${ciFlag}`);
   } else {
-    lines.push(`- Validate config: ${runner} agentready config validate .`);
+    lines.push(`- Validate config: ${runner} agentready config validate ${targetArg}`);
     if (needsCi) {
-      lines.push(`- Add CI later: ${runner} agentready init . --with-ci`);
+      lines.push(`- Add CI later: ${runner} agentready init ${targetArg} --with-ci`);
     }
   }
 
-  lines.push(`- Run a scan: ${runner} agentready scan .`);
-  lines.push(`- Save a review report: ${runner} agentready scan . --format markdown --output agentready-report.md`);
-  lines.push(`- If adopting existing findings: ${runner} agentready baseline . --output .agentready-baseline.json`);
+  lines.push(`- Run a scan: ${runner} agentready scan ${targetArg}`);
+  lines.push(`- Save a review report: ${runner} agentready scan ${targetArg} --format markdown --output agentready-report.md`);
+  lines.push(`- If adopting existing findings: ${runner} agentready baseline ${targetArg}`);
   lines.push("");
   lines.push(`Optional local install: ${packageManager.install} agentready`);
 

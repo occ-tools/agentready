@@ -1,14 +1,14 @@
 import { existsSync } from "node:fs";
-import { readdir, readFile, stat } from "node:fs/promises";
+import { open, readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import { DEFAULT_IGNORED_DIRS, MAX_FILE_BYTES, TEXT_EXTENSIONS } from "./constants.js";
+import { DEFAULT_IGNORED_DIRS, MAX_FILE_BYTES, TEXT_EXTENSIONS, TEXT_FILE_NAMES } from "./constants.js";
 import { DEFAULT_CONFIG, applyFindingConfig, matchesAnyPath } from "./config.js";
 import { applyBaseline } from "./baseline.js";
 import { addFingerprints } from "./fingerprint.js";
 import { toRelative } from "./reporters.js";
 import { enrichFindings } from "./rules.js";
 import { MCP_CONFIG_NAMES, scanMcpConfig } from "./scanners/mcp.js";
-import { SENSITIVE_FILE_PATTERNS, scanSecretContent, scanSensitiveFileName } from "./scanners/secrets.js";
+import { isSensitivePath, scanSecretContent, scanSensitiveFileName } from "./scanners/secrets.js";
 import { scanDangerousShell } from "./scanners/shell.js";
 import { scanGitHubActions } from "./scanners/github-actions.js";
 import { scanPackageJson } from "./scanners/package.js";
@@ -17,7 +17,8 @@ import { scanPythonProjectFiles } from "./scanners/python.js";
 export async function scanProject(root, options = {}) {
   const startedAt = Date.now();
   const config = options.config || DEFAULT_CONFIG;
-  const files = await collectFiles(root, config);
+  const collected = await collectFiles(root, config);
+  const files = collected.files;
   const findings = [];
 
   findings.push(...scanProjectLevel(root));
@@ -49,13 +50,15 @@ export async function scanProject(root, options = {}) {
     scannedAt: new Date().toISOString(),
     durationMs: Date.now() - startedAt,
     filesScanned: files.length,
+    filesSkipped: collected.skipped,
     config: {
       configPath: config.configPath || null,
       failOn: config.failOn,
       baselinePath: config.baselinePath || null,
       ignorePaths: config.ignorePaths || [],
       ignoreRules: config.ignoreRules || [],
-      severityOverrides: config.severityOverrides || {}
+      severityOverrides: config.severityOverrides || {},
+      maxFileBytes: config.maxFileBytes ?? DEFAULT_CONFIG.maxFileBytes
     },
     configWarnings: options.configWarnings || [],
     baseline: baselineResult.summary,
@@ -66,12 +69,22 @@ export async function scanProject(root, options = {}) {
 
 async function collectFiles(root, config) {
   const files = [];
+  const skipped = {
+    ignoredPath: 0,
+    ignoredDirectory: 0,
+    oversized: 0,
+    binary: 0,
+    unsupportedType: 0,
+    unreadableDirectory: 0,
+    unreadableFile: 0
+  };
 
   async function walk(current) {
     let entries;
     try {
       entries = await readdir(current, { withFileTypes: true });
     } catch {
+      skipped.unreadableDirectory += 1;
       return;
     }
 
@@ -80,13 +93,16 @@ async function collectFiles(root, config) {
       const relativePath = toRelative(root, fullPath);
 
       if (matchesAnyPath(config.ignorePaths || [], relativePath)) {
+        skipped.ignoredPath += 1;
         continue;
       }
 
       if (entry.isDirectory()) {
-        if (!DEFAULT_IGNORED_DIRS.has(entry.name)) {
-          await walk(fullPath);
+        if (DEFAULT_IGNORED_DIRS.has(entry.name)) {
+          skipped.ignoredDirectory += 1;
+          continue;
         }
+        await walk(fullPath);
         continue;
       }
 
@@ -94,42 +110,110 @@ async function collectFiles(root, config) {
         continue;
       }
 
-      if (await isLikelyTextFile(fullPath)) {
+      const textCheck = await classifyTextFile(fullPath, relativePath, config);
+      if (textCheck.ok) {
         files.push(fullPath);
+      } else {
+        skipped[textCheck.reason] += 1;
       }
     }
   }
 
   await walk(root);
-  return files;
+  return { files, skipped };
 }
 
-async function isLikelyTextFile(filePath) {
+async function classifyTextFile(filePath, relativePath, config) {
   const extension = path.extname(filePath).toLowerCase();
   const basename = path.basename(filePath);
 
-  if (SENSITIVE_FILE_PATTERNS.some((pattern) => pattern.test(basename))) {
-    return true;
-  }
-
-  if (!TEXT_EXTENSIONS.has(extension) && !MCP_CONFIG_NAMES.has(basename)) {
-    return false;
-  }
-
+  let details;
   try {
-    const details = await stat(filePath);
-    return details.size <= MAX_FILE_BYTES;
+    details = await stat(filePath);
   } catch {
-    return false;
+    return { ok: false, reason: "unreadableFile" };
   }
+
+  if (details.size > (config.maxFileBytes ?? MAX_FILE_BYTES)) {
+    return { ok: false, reason: "oversized" };
+  }
+
+  if (isSensitivePath(relativePath, basename)) {
+    return { ok: true };
+  }
+
+  if (!TEXT_EXTENSIONS.has(extension) && !TEXT_FILE_NAMES.has(basename) && !MCP_CONFIG_NAMES.has(basename)) {
+    return { ok: false, reason: "unsupportedType" };
+  }
+
+  if (await isBinaryFile(filePath)) {
+    return { ok: false, reason: "binary" };
+  }
+
+  return { ok: true };
 }
 
 async function readTextFile(filePath) {
   try {
-    return await readFile(filePath, "utf8");
+    const buffer = await readFile(filePath);
+    return decodeTextBuffer(buffer);
   } catch {
     return null;
   }
+}
+
+function decodeTextBuffer(buffer) {
+  if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xfe) {
+    return buffer.subarray(2).toString("utf16le");
+  }
+
+  if (buffer.length >= 2 && buffer[0] === 0xfe && buffer[1] === 0xff) {
+    return decodeUtf16Be(buffer.subarray(2));
+  }
+
+  if (buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf) {
+    return buffer.subarray(3).toString("utf8");
+  }
+
+  return buffer.toString("utf8");
+}
+
+function decodeUtf16Be(buffer) {
+  const swapped = Buffer.allocUnsafe(buffer.length);
+  for (let index = 0; index < buffer.length; index += 2) {
+    swapped[index] = buffer[index + 1] ?? 0;
+    swapped[index + 1] = buffer[index];
+  }
+  return swapped.toString("utf16le");
+}
+
+async function isBinaryFile(filePath) {
+  let handle;
+  try {
+    handle = await open(filePath, "r");
+    const buffer = Buffer.alloc(1024);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    if (hasTextByteOrderMark(buffer, bytesRead)) {
+      return false;
+    }
+    for (let index = 0; index < bytesRead; index += 1) {
+      if (buffer[index] === 0) {
+        return true;
+      }
+    }
+    return false;
+  } catch {
+    return false;
+  } finally {
+    await handle?.close();
+  }
+}
+
+function hasTextByteOrderMark(buffer, bytesRead) {
+  if (bytesRead >= 2 && ((buffer[0] === 0xff && buffer[1] === 0xfe) || (buffer[0] === 0xfe && buffer[1] === 0xff))) {
+    return true;
+  }
+  return bytesRead >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf;
 }
 
 function scanProjectLevel(root) {

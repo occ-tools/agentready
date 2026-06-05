@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AgentReady scan result",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schemaVersion", "root", "scannedAt", "durationMs", "filesScanned", "config", "findings", "summary"],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "1"
+    },
+    "root": {
+      "type": "string"
+    },
+    "scannedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "durationMs": {
+      "type": "number",
+      "minimum": 0
+    },
+    "filesScanned": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "filesSkipped": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "config": {
+      "type": "object",
+      "required": ["failOn", "ignorePaths", "ignoreRules", "severityOverrides", "maxFileBytes"],
+      "properties": {
+        "configPath": {
+          "type": ["string", "null"]
+        },
+        "failOn": {
+          "type": "string",
+          "enum": ["high", "medium", "low", "info", "none"]
+        },
+        "baselinePath": {
+          "type": ["string", "null"]
+        },
+        "ignorePaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ignoreRules": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "severityOverrides": {
+          "type": "object"
+        },
+        "maxFileBytes": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "baseline": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": ["string", "null"]
+        },
+        "entries": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "suppressed": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    },
+    "summary": {
+      "$ref": "#/$defs/severitySummary"
+    },
+    "nextSteps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "$defs": {
+    "severitySummary": {
+      "type": "object",
+      "required": ["high", "medium", "low", "info"],
+      "properties": {
+        "high": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "medium": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "low": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "info": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "required": ["id", "severity", "title", "recommendation"],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["high", "medium", "low", "info"]
+        },
+        "category": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "file": {
+          "type": ["string", "null"]
+        },
+        "line": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "evidence": {
+          "type": "string"
+        },
+        "recommendation": {
+          "type": "string"
+        },
+        "why": {
+          "type": "string"
+        },
+        "fingerprint": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

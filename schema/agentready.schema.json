@@ -5,30 +5,35 @@
   "additionalProperties": false,
   "properties": {
     "$schema": {
-      "type": "string"
+      "type": "string",
+      "description": "Optional JSON Schema URL for editor validation and completion."
     },
     "failOn": {
       "type": "string",
       "enum": ["high", "medium", "low", "info", "none"],
-      "default": "medium"
+      "default": "medium",
+      "description": "Lowest finding severity that should fail CI when --ci is used."
     },
     "baselinePath": {
       "type": ["string", "null"],
-      "default": null
+      "default": null,
+      "description": "Optional path to a reviewed AgentReady baseline file."
     },
     "ignorePaths": {
       "type": "array",
       "items": {
         "type": "string"
       },
-      "default": []
+      "default": [],
+      "description": "Path patterns excluded from scanning. Use sparingly for reviewed paths."
     },
     "ignoreRules": {
       "type": "array",
       "items": {
         "type": "string"
       },
-      "default": []
+      "default": [],
+      "description": "Rule ids hidden from active scan results after review."
     },
     "severityOverrides": {
       "type": "object",
@@ -36,7 +41,14 @@
         "type": "string",
         "enum": ["high", "medium", "low", "info"]
       },
-      "default": {}
+      "default": {},
+      "description": "Per-rule severity overrides for reviewed local policy differences."
+    },
+    "maxFileBytes": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 524288,
+      "description": "Maximum file size, in bytes, that AgentReady reads during scans."
     }
   }
 }

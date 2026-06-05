@@ -1,0 +1,53 @@
+name: release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  npm-publish:
+    runs-on: ubuntu-latest
+    environment: npm
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - run: npm ci
+      - name: Verify release tag matches package version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          node - <<'NODE'
+          const packageJson = require("./package.json");
+          const expectedTag = "v" + packageJson.version;
+          if (process.env.RELEASE_TAG !== expectedTag) {
+            throw new Error(`Release tag ${process.env.RELEASE_TAG} must match package version ${packageJson.version} (${expectedTag}).`);
+          }
+          NODE
+      - name: Verify trusted publishing runtime
+        run: |
+          node --version
+          npm --version
+          node - <<'NODE'
+          const { execSync } = require("node:child_process");
+          const version = execSync("npm --version", { encoding: "utf8" }).trim();
+          const [major, minor, patch] = version.split(".").map(Number);
+          if (
+            major < 11 ||
+            (major === 11 && minor < 5) ||
+            (major === 11 && minor === 5 && patch < 1)
+          ) {
+            throw new Error(`npm ${version} is too old for Trusted Publishing; use npm 11.5.1 or newer.`);
+          }
+          NODE
+      - run: npm run market:check
+      - run: npm publish --provenance --access public

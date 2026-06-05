@@ -5,6 +5,37 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { scanProject } from "../src/scanner.js";
 
+const FIXTURE_ROOT = path.resolve("test", "fixtures");
+
+test("demo fixture: clean project stays clean", async () => {
+  const result = await scanProject(path.join(FIXTURE_ROOT, "demo-clean"));
+
+  assert.deepEqual(result.summary, { high: 0, medium: 0, low: 0, info: 0 });
+  assert.equal(result.findings.length, 0);
+});
+
+test("demo fixture: legacy project shows adoption debt", async () => {
+  const result = await scanProject(path.join(FIXTURE_ROOT, "demo-legacy"));
+  const ids = result.findings.map((finding) => finding.id);
+
+  assert.ok(ids.includes("agent.missing_agents_md"));
+  assert.ok(ids.includes("agent.missing_agentignore"));
+  assert.ok(ids.includes("python.unpinned_requirement"));
+  assert.ok(ids.includes("package.lifecycle_script"));
+});
+
+test("demo fixture: CI and MCP project shows toolchain risks", async () => {
+  const result = await scanProject(path.join(FIXTURE_ROOT, "demo-ci-mcp"));
+  const ids = result.findings.map((finding) => finding.id);
+
+  assert.ok(ids.includes("mcp.shell_tool"));
+  assert.ok(ids.includes("mcp.remote_url"));
+  assert.ok(ids.includes("mcp.metadata_endpoint"));
+  assert.ok(ids.includes("github_actions.pull_request_target_checkout"));
+  assert.ok(ids.includes("github_actions.artifact_execution"));
+  assert.ok(ids.includes("github_actions.oidc_cloud_deploy"));
+});
+
 test("fixture: clean initialized project has no findings", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "agentready-clean-"));
   await writeFile(path.join(root, "AGENTS.md"), "# AGENTS.md\n", "utf8");

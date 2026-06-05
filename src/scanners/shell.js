@@ -1,7 +1,16 @@
 import { redact, splitLines } from "./utils.js";
 
+const SHELL_LIKE_FILE_NAMES = new Set([
+  "Dockerfile",
+  "Justfile",
+  "Makefile",
+  "dockerfile",
+  "makefile"
+]);
+
 export function scanDangerousShell(relativePath, content) {
-  if (!/\.(?:sh|ps1|bash|zsh|cmd|bat)$/i.test(relativePath)) {
+  const basename = relativePath.split("/").pop();
+  if (!/\.(?:sh|ps1|bash|zsh|cmd|bat)$/i.test(relativePath) && !SHELL_LIKE_FILE_NAMES.has(basename)) {
     return [];
   }
 
@@ -13,7 +22,12 @@ export function scanDangerousCommandLines(relativePath, content, idPrefix) {
   const lines = splitLines(content);
 
   for (let index = 0; index < lines.length; index += 1) {
-    const commandFindings = classifyDangerousCommand(lines[index]);
+    const trimmed = lines[index].trim();
+    if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("::") || /^rem\b/i.test(trimmed)) {
+      continue;
+    }
+
+    const commandFindings = classifyDangerousCommand(trimmed);
     for (const commandFinding of commandFindings) {
       findings.push({
         id: `${idPrefix}.${commandFinding.id}`,
@@ -21,7 +35,7 @@ export function scanDangerousCommandLines(relativePath, content, idPrefix) {
         title: "Risky command detected",
         file: relativePath,
         line: index + 1,
-        evidence: redact(lines[index].trim()),
+        evidence: redact(trimmed),
         recommendation: commandFinding.recommendation
       });
     }
@@ -33,7 +47,7 @@ export function scanDangerousCommandLines(relativePath, content, idPrefix) {
 export function classifyDangerousCommand(command) {
   const findings = [];
 
-  if (/\brm\s+-rf\s+(?:\/|\*|~|\$HOME|%USERPROFILE%)/i.test(command)) {
+  if (/\brm\s+-(?=[A-Za-z]*r)(?=[A-Za-z]*f)[A-Za-z]+\s+["']?(?:\/|\*|~|\$HOME|%USERPROFILE%)["']?/i.test(command)) {
     findings.push({
       id: "recursive_delete",
       severity: "high",

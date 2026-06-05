@@ -37,6 +37,9 @@ Rule ids should be stable after release because users may reference them in
 Keep pull requests focused. Include the command output for relevant verification
 such as `npm run verify`.
 
+Use `npm run market:check` for changes that affect release workflows, packaged
+files, GitHub Actions, public documentation, or the npm publishing surface.
+
 Use the pull request template and explain:
 
 - what changed

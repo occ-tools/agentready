@@ -1,7 +1,8 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { configError } from "./errors.js";
+import { MAX_FILE_BYTES } from "./constants.js";
+import { configError, usageError } from "./errors.js";
 import { RULE_CATALOG } from "./rules.js";
 
 export const CONFIG_FILE_NAMES = ["agentready.config.json", ".agentready.json"];
@@ -13,9 +14,11 @@ export const DEFAULT_CONFIG = {
   ignorePaths: [],
   ignoreRules: [],
   severityOverrides: {},
+  maxFileBytes: MAX_FILE_BYTES,
   failOn: "medium"
 };
 
+const KNOWN_CONFIG_FIELDS = new Set(["$schema", "baselinePath", "failOn", "ignorePaths", "ignoreRules", "severityOverrides", "maxFileBytes"]);
 const KNOWN_RULE_IDS = new Set(RULE_CATALOG.map((rule) => rule.id));
 
 export async function loadConfig(root, explicitPath = null) {
@@ -57,21 +60,30 @@ export function applyCliOverrides(config, options = {}) {
     ignoreRules: [...config.ignoreRules],
     severityOverrides: { ...config.severityOverrides }
   };
+  next.maxFileBytes = config.maxFileBytes ?? DEFAULT_CONFIG.maxFileBytes;
 
   for (const rule of options.ignoreRules || []) {
-    assertKnownRule(rule, "ignore-rule");
-    next.ignoreRules.push(rule);
+    const normalizedRule = String(rule).trim();
+    assertKnownRule(normalizedRule, "ignore-rule");
+    next.ignoreRules.push(normalizedRule);
   }
 
   for (const pattern of options.ignorePaths || []) {
-    next.ignorePaths.push(pattern);
+    const normalizedPattern = String(pattern).trim();
+    if (normalizedPattern) {
+      next.ignorePaths.push(normalizedPattern);
+    }
   }
 
   if (options.failOn) {
     if (!FAIL_ON_VALUES.includes(options.failOn)) {
-      throw new Error(`Unsupported fail threshold "${options.failOn}". Use ${FAIL_ON_VALUES.join(", ")}.`);
+      throw usageError(`Unsupported fail threshold "${options.failOn}". Use ${FAIL_ON_VALUES.join(", ")}.`);
     }
     next.failOn = options.failOn;
+  }
+
+  if (options.maxFileSize !== undefined) {
+    next.maxFileBytes = parsePositiveInteger(options.maxFileSize, "--max-file-size");
   }
 
   return next;
@@ -113,12 +125,28 @@ function findConfigPath(root) {
 
 function normalizeConfig(input) {
   const warnings = [];
+
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    warnings.push("Configuration root must be an object; defaults were used.");
+    return {
+      config: { ...DEFAULT_CONFIG },
+      warnings
+    };
+  }
+
+  for (const field of Object.keys(input)) {
+    if (!KNOWN_CONFIG_FIELDS.has(field)) {
+      warnings.push(`Unknown configuration field ignored: ${field}`);
+    }
+  }
+
   const config = {
     ...DEFAULT_CONFIG,
     baselinePath: normalizeOptionalString(input.baselinePath, "baselinePath", warnings),
     ignorePaths: normalizeStringArray(input.ignorePaths, "ignorePaths", warnings),
     ignoreRules: normalizeStringArray(input.ignoreRules, "ignoreRules", warnings),
     severityOverrides: normalizeSeverityOverrides(input.severityOverrides, warnings),
+    maxFileBytes: normalizePositiveInteger(input.maxFileBytes, "maxFileBytes", warnings, DEFAULT_CONFIG.maxFileBytes),
     failOn: typeof input.failOn === "string" ? input.failOn : DEFAULT_CONFIG.failOn
   };
 
@@ -142,6 +170,27 @@ function normalizeConfig(input) {
   return { config, warnings };
 }
 
+function normalizePositiveInteger(value, field, warnings, fallback) {
+  if (value === undefined) {
+    return fallback;
+  }
+
+  if (!Number.isInteger(value) || value <= 0) {
+    warnings.push(`${field} must be a positive integer and was ignored.`);
+    return fallback;
+  }
+
+  return value;
+}
+
+function parsePositiveInteger(value, optionName) {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw usageError(`${optionName} requires a positive integer.`);
+  }
+  return parsed;
+}
+
 function normalizeStringArray(value, field, warnings) {
   if (value === undefined) {
     return [];
@@ -152,13 +201,15 @@ function normalizeStringArray(value, field, warnings) {
     return [];
   }
 
-  return value.filter((item) => {
+  const normalized = [];
+  for (const item of value) {
     if (typeof item === "string" && item.trim()) {
-      return true;
+      normalized.push(item.trim());
+      continue;
     }
     warnings.push(`${field} contains a non-string value that was ignored.`);
-    return false;
-  });
+  }
+  return normalized;
 }
 
 function normalizeOptionalString(value, field, warnings) {
@@ -223,6 +274,11 @@ function globToRegExp(pattern) {
     const next = pattern[index + 1];
 
     if (char === "*" && next === "*") {
+      if (pattern[index + 2] === "/") {
+        source += "(?:.*/)?";
+        index += 2;
+        continue;
+      }
       source += ".*";
       index += 1;
       continue;
@@ -245,10 +301,10 @@ function escapeRegExp(value) {
 
 function assertKnownRule(rule, optionName) {
   if (typeof rule !== "string" || !rule.trim()) {
-    throw new Error(`--${optionName} requires a rule id.`);
+    throw usageError(`--${optionName} requires a rule id.`);
   }
 
   if (!KNOWN_RULE_IDS.has(rule)) {
-    throw new Error(`Unknown rule id for --${optionName}: ${rule}. Run agentready list-rules.`);
+    throw usageError(`Unknown rule id for --${optionName}: ${rule}. Run agentready list-rules.`);
   }
 }

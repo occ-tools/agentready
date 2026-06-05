@@ -9,6 +9,7 @@
   "files": [
     "bin/",
     "src/",
+    "scripts/",
     "docs/",
     "schema/",
     "AGENTS.md",
@@ -28,7 +29,8 @@
     "config:validate": "node ./bin/agentready.js config validate .",
     "pack:dry-run": "npm pack --dry-run",
     "verify": "npm test && npm run scan:ci && npm run config:validate && npm run pack:dry-run",
-    "prepublishOnly": "npm run verify",
+    "market:check": "node ./scripts/market-check.mjs",
+    "prepublishOnly": "npm run market:check",
     "test": "node --test"
   },
   "keywords": [

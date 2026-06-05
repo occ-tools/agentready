@@ -27,29 +27,92 @@ inputs:
     description: Optional AgentReady configuration file.
     required: false
     default: ""
+  max-findings:
+    description: Optional maximum number of detailed findings to print.
+    required: false
+    default: ""
+  max-file-size:
+    description: Optional maximum file size, in bytes, to read during scans.
+    required: false
+    default: ""
+  summary-only:
+    description: Print only the summary and next steps.
+    required: false
+    default: "false"
+  group-by:
+    description: Finding grouping for text and Markdown output. Use severity or category.
+    required: false
+    default: "severity"
+  upload-sarif:
+    description: Upload the output SARIF file to GitHub code scanning. Requires format=sarif and output to be set.
+    required: false
+    default: "false"
 
 runs:
   using: composite
   steps:
     - name: Run AgentReady
       shell: bash
+      env:
+        AGENTREADY_INPUT_PATH: ${{ inputs.path }}
+        AGENTREADY_INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        AGENTREADY_INPUT_FORMAT: ${{ inputs.format }}
+        AGENTREADY_INPUT_OUTPUT: ${{ inputs.output }}
+        AGENTREADY_INPUT_BASELINE: ${{ inputs.baseline }}
+        AGENTREADY_INPUT_CONFIG: ${{ inputs.config }}
+        AGENTREADY_INPUT_MAX_FINDINGS: ${{ inputs.max-findings }}
+        AGENTREADY_INPUT_MAX_FILE_SIZE: ${{ inputs.max-file-size }}
+        AGENTREADY_INPUT_SUMMARY_ONLY: ${{ inputs.summary-only }}
+        AGENTREADY_INPUT_GROUP_BY: ${{ inputs.group-by }}
+        AGENTREADY_INPUT_UPLOAD_SARIF: ${{ inputs.upload-sarif }}
       run: |
         set -euo pipefail
 
-        args=(scan "${{ inputs.path }}" --ci --fail-on "${{ inputs.fail-on }}" --format "${{ inputs.format }}")
+        args=(scan "$AGENTREADY_INPUT_PATH" --ci --fail-on "$AGENTREADY_INPUT_FAIL_ON" --format "$AGENTREADY_INPUT_FORMAT")
+        upload_sarif=false
 
-        if [ -n "${{ inputs.output }}" ]; then
-          args+=(--output "${{ inputs.output }}")
+        if [ "$AGENTREADY_INPUT_UPLOAD_SARIF" = "true" ] || [ "$AGENTREADY_INPUT_UPLOAD_SARIF" = "1" ]; then
+          upload_sarif=true
         fi
 
-        if [ -n "${{ inputs.baseline }}" ]; then
-          args+=(--baseline "${{ inputs.baseline }}")
+        if [ "$upload_sarif" = "true" ] && { [ "$AGENTREADY_INPUT_FORMAT" != "sarif" ] || [ -z "$AGENTREADY_INPUT_OUTPUT" ]; }; then
+          echo "::error::upload-sarif requires format=sarif and output to be set."
+          exit 2
         fi
 
-        if [ -n "${{ inputs.config }}" ]; then
-          args+=(--config "${{ inputs.config }}")
+        if [ -n "$AGENTREADY_INPUT_OUTPUT" ]; then
+          args+=(--output "$AGENTREADY_INPUT_OUTPUT")
+        fi
+
+        if [ -n "$AGENTREADY_INPUT_BASELINE" ]; then
+          args+=(--baseline "$AGENTREADY_INPUT_BASELINE")
+        fi
+
+        if [ -n "$AGENTREADY_INPUT_CONFIG" ]; then
+          args+=(--config "$AGENTREADY_INPUT_CONFIG")
+        fi
+
+        if [ -n "$AGENTREADY_INPUT_MAX_FINDINGS" ]; then
+          args+=(--max-findings "$AGENTREADY_INPUT_MAX_FINDINGS")
+        fi
+
+        if [ -n "$AGENTREADY_INPUT_MAX_FILE_SIZE" ]; then
+          args+=(--max-file-size "$AGENTREADY_INPUT_MAX_FILE_SIZE")
+        fi
+
+        if [ "$AGENTREADY_INPUT_SUMMARY_ONLY" = "true" ] || [ "$AGENTREADY_INPUT_SUMMARY_ONLY" = "1" ]; then
+          args+=(--summary-only)
+        fi
+
+        if [ -n "$AGENTREADY_INPUT_GROUP_BY" ]; then
+          args+=(--group-by "$AGENTREADY_INPUT_GROUP_BY")
         fi
 
         cli_path="$GITHUB_ACTION_PATH/bin/agentready.js"
         node "$cli_path" version
         node "$cli_path" "${args[@]}"
+    - name: Upload AgentReady SARIF
+      if: ${{ !cancelled() && (inputs.upload-sarif == 'true' || inputs.upload-sarif == '1') && inputs.format == 'sarif' && inputs.output != '' }}
+      uses: github/codeql-action/upload-sarif@v4
+      with:
+        sarif_file: ${{ inputs.output }}

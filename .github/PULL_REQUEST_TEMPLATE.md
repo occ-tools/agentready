@@ -15,6 +15,7 @@
 ## Verification
 
 - [ ] `npm run verify`
+- [ ] `npm run market:check` for release, package, workflow, or public documentation changes
 - [ ] Relevant CLI output reviewed
 - [ ] Documentation updated when user-facing behavior changed
 

@@ -22,6 +22,10 @@ AgentReady redacts known secret values, but reports may include:
 
 Treat Markdown, JSON, SARIF, and baseline files as sensitive until reviewed.
 
+`.agentignore` is an agent-boundary file, not a privacy filter for reports.
+Use configuration `ignorePaths` for reviewed paths that should not appear in
+AgentReady results.
+
 ## Baseline Files
 
 Baseline files contain finding metadata and fingerprints. Commit them only after

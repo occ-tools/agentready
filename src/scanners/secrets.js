@@ -1,7 +1,10 @@
 import { redact, splitLines } from "./utils.js";
 
 export const SENSITIVE_FILE_PATTERNS = [
-  /^\.env(?:\.|$)/,
+  /^\.env(?:\.|rc$|$)/,
+  /^\.npmrc$/,
+  /^\.pypirc$/,
+  /^\.netrc$/,
   /(?:^|[._-])secret(?:s)?(?:[._-]|$).*\.(?:json|ya?ml|toml|ini|txt|env)$/i,
   /(?:^|[._-])credential(?:s)?(?:[._-]|$).*\.(?:json|ya?ml|toml|ini|txt|env)$/i,
   /\.(?:pem|key|p12|pfx)$/i
@@ -41,7 +44,7 @@ const SECRET_PATTERNS = [
 ];
 
 export function scanSensitiveFileName(relativePath, basename) {
-  if (!isSensitiveFileName(basename)) {
+  if (!isSensitivePath(relativePath, basename) || isTemplateSensitiveFileName(basename)) {
     return [];
   }
 
@@ -52,7 +55,7 @@ export function scanSensitiveFileName(relativePath, basename) {
       title: "Sensitive-looking file is agent-readable",
       file: relativePath,
       line: null,
-      evidence: basename,
+      evidence: relativePath,
       recommendation: "Keep this file out of git and add it to .agentignore unless agents explicitly need it."
     }
   ];
@@ -81,7 +84,7 @@ export function scanSecretContent(relativePath, basename, content) {
     }
   }
 
-  if (isSensitiveFileName(basename)) {
+  if (isSensitivePath(relativePath, basename)) {
     findings.push(...scanGenericSecretAssignments(relativePath, lines));
   }
 
@@ -92,12 +95,25 @@ export function isSensitiveFileName(basename) {
   return SENSITIVE_FILE_PATTERNS.some((pattern) => pattern.test(basename));
 }
 
+export function isSensitivePath(relativePath, basename) {
+  const normalized = String(relativePath).replaceAll("\\", "/");
+  return isSensitiveFileName(basename) || /(^|\/)(secrets?|credentials?|private|backups?)(\/|$)/i.test(normalized);
+}
+
+function isTemplateSensitiveFileName(basename) {
+  return /(?:^|[._-])(example|sample|template|dummy)(?:[._-]|$)/i.test(basename);
+}
+
 function scanGenericSecretAssignments(relativePath, lines) {
   const findings = [];
-  const pattern = /^\s*([A-Z0-9_-]*(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD|PRIVATE[_-]?KEY)[A-Z0-9_-]*)\s*[:=]\s*["']?([^"'\s#]{8,})/i;
 
   for (let index = 0; index < lines.length; index += 1) {
-    const match = lines[index].match(pattern);
+    const line = lines[index].trim();
+    if (!line || line.startsWith("#")) {
+      continue;
+    }
+
+    const match = matchSecretAssignment(line);
     if (!match) {
       continue;
     }
@@ -120,6 +136,27 @@ function scanGenericSecretAssignments(relativePath, lines) {
   return findings;
 }
 
+function matchSecretAssignment(line) {
+  const netrcPassword = line.match(/\b(password)\s+([^\s#]{8,})/i);
+  if (netrcPassword) {
+    return netrcPassword;
+  }
+
+  const patterns = [
+    /^(?:export\s+)?[{,]?\s*["']?([A-Z0-9_-]*(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD|PRIVATE[_-]?KEY)[A-Z0-9_-]*)["']?\s*[:=]\s*["']?([^"',}\s#]{8,})/i,
+    /(?:^|:)([A-Z0-9_-]*(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD|PRIVATE[_-]?KEY)[A-Z0-9_-]*)\s*=\s*["']?([^"'\s#]{8,})/i
+  ];
+
+  for (const pattern of patterns) {
+    const match = line.match(pattern);
+    if (match) {
+      return match;
+    }
+  }
+
+  return null;
+}
+
 function isPlaceholderSecret(value) {
-  return /^(example|changeme|change_me|replace_me|placeholder|dummy|test|todo|xxx+|your_|<)/i.test(String(value));
+  return /^(example|sample|changeme|change[-_]?me|replace[-_]?me|placeholder|dummy|test|todo|xxx+|your[-_]?|<)/i.test(String(value));
 }

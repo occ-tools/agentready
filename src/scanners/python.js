@@ -22,7 +22,7 @@ export function scanPythonProjectFiles(relativePath, basename, content) {
     }
   }
 
-  if (basename === "pyproject.toml" && !/requires-python\s*=/.test(content)) {
+  if (basename === "pyproject.toml" && !hasRequiresPython(content)) {
     findings.push({
       id: "python.missing_requires_python",
       severity: "info",
@@ -35,4 +35,11 @@ export function scanPythonProjectFiles(relativePath, basename, content) {
   }
 
   return findings;
+}
+
+function hasRequiresPython(content) {
+  return content.split(/\r?\n/).some((line) => {
+    const trimmed = line.trim();
+    return trimmed && !trimmed.startsWith("#") && /^requires-python\s*=/.test(trimmed);
+  });
 }

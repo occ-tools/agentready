@@ -1,7 +1,9 @@
 {
+  "$schema": "https://raw.githubusercontent.com/wangjiehu/agentready/main/schema/agentready.schema.json",
   "baselinePath": null,
   "failOn": "medium",
-  "ignorePaths": [],
+  "ignorePaths": ["test/fixtures/**"],
   "ignoreRules": [],
-  "severityOverrides": {}
+  "severityOverrides": {},
+  "maxFileBytes": 524288
 }
