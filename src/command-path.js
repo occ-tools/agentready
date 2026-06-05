@@ -18,7 +18,8 @@ export function formatCommandPath(root) {
 
 function quoteShellPath(value) {
   if (process.platform === "win32") {
-    return `'${value.replaceAll("'", "''")}'`;
+    // Double quotes work in both cmd.exe and PowerShell; escape embedded double quotes
+    return `"${value.replaceAll('"', '""')}"`;
   }
 
   return `'${value.replaceAll("'", "'\\''")}'`;

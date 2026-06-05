@@ -11,7 +11,8 @@ export function fingerprintFinding(finding) {
   const stableParts = [
     finding.id || "",
     finding.file || "",
-    finding.line || "",
+    // Use ?? "" so line number 0 is preserved (not coerced to falsy)
+    String(finding.line ?? ""),
     finding.evidence || "",
     finding.title || ""
   ];

@@ -2,7 +2,8 @@ import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { formatCommandPath } from "./command-path.js";
-import { usageError } from "./errors.js";
+import { MAX_FILE_BYTES } from "./constants.js";
+import { AgentReadyError, usageError } from "./errors.js";
 
 const PRESETS = new Set(["balanced", "strict", "legacy"]);
 
@@ -144,7 +145,7 @@ function buildConfig(preset) {
     ignorePaths: preset === "strict" ? ["fixtures/**", "examples/**"] : [],
     ignoreRules: [],
     severityOverrides: {},
-    maxFileBytes: 524288
+    maxFileBytes: MAX_FILE_BYTES
   };
 
   return `${JSON.stringify(config, null, 2)}\n`;
@@ -165,7 +166,14 @@ async function ensureFile(root, relativePath, content, options, messages) {
     return;
   }
 
-  await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, content, "utf8");
+  try {
+    await mkdir(path.dirname(filePath), { recursive: true });
+    await writeFile(filePath, content, "utf8");
+  } catch (error) {
+    throw new AgentReadyError(
+      `Failed to write ${displayPath}: ${error.message}\nCheck that the directory is writable and that you have sufficient permissions.`,
+      4
+    );
+  }
   messages.push(`${existed ? "Wrote" : "Created"} ${displayPath}`);
 }

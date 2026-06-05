@@ -163,7 +163,7 @@ export function formatText(result, options = {}) {
   if (result.findings.length === 0) {
     lines.push(result.report?.totalFindings > 0 ? "No findings displayed by the current report limit." : "No findings detected.", "");
     appendNextSteps(lines, result, false);
-    return lines.join("\n");
+    return lines.join("\n").trimEnd();
   }
 
   lines.push("Top risks:");
@@ -529,16 +529,7 @@ function formatAge(ageDays) {
 }
 
 function topRisks(findings, limit = 5) {
-  const rank = new Map(SEVERITIES.map((severity, index) => [severity, index]));
-  return [...findings]
-    .sort((left, right) => {
-      const severityDelta = rank.get(left.severity) - rank.get(right.severity);
-      if (severityDelta !== 0) {
-        return severityDelta;
-      }
-      return String(left.file || "").localeCompare(String(right.file || ""));
-    })
-    .slice(0, limit);
+  return sortFindings(findings).slice(0, limit);
 }
 
 function nextSteps(result) {
@@ -656,8 +647,12 @@ function toSarifRule(rule) {
 }
 
 function toSarifLevel(severity) {
-  if (severity === "high" || severity === "medium") {
+  if (severity === "high") {
     return "error";
+  }
+
+  if (severity === "medium") {
+    return "warning";
   }
 
   if (severity === "low") {

@@ -1,10 +1,10 @@
 import { redact, splitLines } from "./utils.js";
 
 export const SENSITIVE_FILE_PATTERNS = [
-  /^\.env(?:\.|rc$|$)/,
-  /^\.npmrc$/,
-  /^\.pypirc$/,
-  /^\.netrc$/,
+  /^\.env(?:[.-]|rc$|$)/i,
+  /^\.npmrc$/i,
+  /^\.pypirc$/i,
+  /^\.netrc$/i,
   /(?:^|[._-])secret(?:s)?(?:[._-]|$).*\.(?:json|ya?ml|toml|ini|txt|env)$/i,
   /(?:^|[._-])credential(?:s)?(?:[._-]|$).*\.(?:json|ya?ml|toml|ini|txt|env)$/i,
   /\.(?:pem|key|p12|pfx)$/i
@@ -80,7 +80,7 @@ export function scanSecretContent(relativePath, basename, content) {
         evidence: redact(lines[index]),
         recommendation: rule.recommendation
       });
-      break;
+      // Do NOT break — report ALL occurrences of each secret pattern in the file
     }
   }
 
@@ -158,5 +158,26 @@ function matchSecretAssignment(line) {
 }
 
 function isPlaceholderSecret(value) {
-  return /^(example|sample|changeme|change[-_]?me|replace[-_]?me|placeholder|dummy|test|todo|xxx+|your[-_]?|<)/i.test(String(value));
+  const str = String(value);
+  // Obvious placeholder prefixes
+  if (/^(example|sample|changeme|change[-_]?me|replace[-_]?me|placeholder|dummy|test|todo|xxx+|your[-_]?|<)/i.test(str)) {
+    return true;
+  }
+  // Environment variable references like $VAR, ${VAR}, %VAR%
+  if (/^(\$\{?[A-Z_][A-Z0-9_]*\}?|%[A-Z_][A-Z0-9_]*%)/i.test(str)) {
+    return true;
+  }
+  // URL values are not secrets
+  if (/^https?:\/\//i.test(str)) {
+    return true;
+  }
+  // Absolute file paths are not secrets
+  if (/^\/[^\s]|^[A-Za-z]:[/\\]/.test(str)) {
+    return true;
+  }
+  // Boolean or null literals
+  if (/^(true|false|null|none|undefined)$/i.test(str)) {
+    return true;
+  }
+  return false;
 }

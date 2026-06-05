@@ -1,13 +1,14 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { MAX_FILE_BYTES } from "./constants.js";
+import { MAX_FILE_BYTES, SEVERITIES } from "./constants.js";
 import { configError, usageError } from "./errors.js";
 import { RULE_CATALOG } from "./rules.js";
 
 export const CONFIG_FILE_NAMES = ["agentready.config.json", ".agentready.json"];
-export const SEVERITY_ORDER = ["high", "medium", "low", "info"];
-export const FAIL_ON_VALUES = [...SEVERITY_ORDER, "none"];
+// Re-export as SEVERITY_ORDER for backward compatibility; SEVERITIES from constants is canonical
+export const SEVERITY_ORDER = SEVERITIES;
+export const FAIL_ON_VALUES = [...SEVERITIES, "none"];
 
 export const DEFAULT_CONFIG = {
   baselinePath: null,
@@ -203,11 +204,16 @@ function normalizeStringArray(value, field, warnings) {
 
   const normalized = [];
   for (const item of value) {
-    if (typeof item === "string" && item.trim()) {
-      normalized.push(item.trim());
+    if (typeof item !== "string") {
+      warnings.push(`${field} contains a non-string value that was ignored.`);
       continue;
     }
-    warnings.push(`${field} contains a non-string value that was ignored.`);
+    const trimmed = item.trim();
+    if (!trimmed) {
+      warnings.push(`${field} contains an empty string that was ignored.`);
+      continue;
+    }
+    normalized.push(trimmed);
   }
   return normalized;
 }

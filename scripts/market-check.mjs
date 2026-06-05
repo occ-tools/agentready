@@ -5,19 +5,29 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const PKG = JSON.parse(readFileSync(path.join(ROOT, "package.json"), "utf8"));
 const SKIPPED_DIRS = new Set([
+  ".cache",
   ".git",
+  ".gradle",
   ".hg",
-  ".svn",
+  ".mypy_cache",
   ".next",
+  ".nuxt",
+  ".pytest_cache",
+  ".svn",
+  ".tox",
   ".turbo",
+  ".venv",
+  "__pycache__",
   "build",
   "coverage",
   "dist",
   "node_modules",
   "out",
   "target",
-  "vendor"
+  "vendor",
+  "venv"
 ]);
 const SENSITIVE_SEGMENTS = new Set(["secrets", "credentials", "private", "backups"]);
 const SENSITIVE_FILES = new Set([".env", ".envrc", ".npmrc", ".pypirc", ".netrc"]);
@@ -102,8 +112,8 @@ function runTarballSmoke() {
     const cli = path.join(project, "node_modules", "agentready", "bin", "agentready.js");
     const version = run(process.execPath, [cli, "version"], { cwd: project }).trim();
     const scan = JSON.parse(run(process.execPath, [cli, "scan", project, "--format", "json", "--summary-only"], { cwd: project }));
-    if (version !== "0.1.0" || scan.schemaVersion !== "1") {
-      throw new Error(`unexpected tarball smoke result version=${version} schema=${scan.schemaVersion}`);
+    if (version !== PKG.version || scan.schemaVersion !== "1") {
+      throw new Error(`unexpected tarball smoke result version=${version} (expected ${PKG.version}) schema=${scan.schemaVersion}`);
     }
   } finally {
     safeRemoveTempDir(tempRoot);
@@ -200,8 +210,12 @@ function isTextLike(file) {
   const basename = path.basename(file);
   const extension = path.extname(file).toLowerCase();
   return (
-    [".js", ".mjs", ".cjs", ".json", ".md", ".yml", ".yaml", ".toml", ".txt"].includes(extension) ||
-    ["Dockerfile", "Makefile", "Taskfile", "Justfile", "action.yml"].includes(basename)
+    [
+      ".js", ".mjs", ".cjs", ".json", ".md", ".yml", ".yaml",
+      ".toml", ".txt", ".sh", ".bash", ".zsh", ".ps1",
+      ".py", ".rb", ".ts", ".tsx", ".tf", ".hcl"
+    ].includes(extension) ||
+    ["Dockerfile", "dockerfile", "Makefile", "makefile", "Taskfile", "Justfile", "action.yml"].includes(basename)
   );
 }
 

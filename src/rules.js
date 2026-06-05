@@ -55,10 +55,12 @@ export function enrichFindings(findings) {
   return findings.map((finding) => {
     const metadata = RULE_BY_ID.get(finding.id);
     const category = finding.category || metadata?.category || categoryForRule(finding.id);
+    const why = finding.why || metadata?.why || whyForCategory(category);
+    // Spread finding first so computed values override undefined fields from finding
     return {
+      ...finding,
       category,
-      why: finding.why || metadata?.why || whyForCategory(category),
-      ...finding
+      why
     };
   });
 }

@@ -8,6 +8,10 @@ export function scanPythonProjectFiles(relativePath, basename, content) {
       if (!line || line.startsWith("#") || /^-/.test(line)) {
         continue;
       }
+      // Skip URL-based requirements (e.g. https://... or package @ https://...)
+      if (/https?:\/\//.test(line) || /\s+@\s+/.test(line)) {
+        continue;
+      }
       if (!/[=<>~!]=/.test(line)) {
         findings.push({
           id: "python.unpinned_requirement",

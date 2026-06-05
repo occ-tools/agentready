@@ -15,9 +15,16 @@ test("formatCommandPath quotes shell-sensitive paths literally", async () => {
   try {
     const formatted = formatCommandPath(target);
 
-    assert.equal(formatted.startsWith("'"), true);
-    assert.equal(formatted.endsWith("'"), true);
-    assert.doesNotMatch(formatted, /^"/);
+    if (process.platform === "win32") {
+      // On Windows, double quotes are used (compatible with cmd.exe and PowerShell)
+      assert.equal(formatted.startsWith('"'), true);
+      assert.equal(formatted.endsWith('"'), true);
+    } else {
+      // On Unix, single quotes are used
+      assert.equal(formatted.startsWith("'"), true);
+      assert.equal(formatted.endsWith("'"), true);
+    }
+
     assert.match(formatted, /\$HOME/);
     assert.match(formatted, /`date`/);
   } finally {

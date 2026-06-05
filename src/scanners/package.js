@@ -24,7 +24,11 @@ export function scanPackageJson(relativePath, basename, content) {
   }
 
   const findings = [];
-  const scripts = parsed.scripts || {};
+  // Guard: scripts must be a plain object (not array, string, etc.)
+  const scripts =
+    parsed.scripts && typeof parsed.scripts === "object" && !Array.isArray(parsed.scripts)
+      ? parsed.scripts
+      : {};
   for (const [name, command] of Object.entries(scripts)) {
     const commandFindings = classifyDangerousCommand(String(command));
     for (const commandFinding of commandFindings) {

@@ -101,7 +101,13 @@ export function scanMcpConfig(relativePath, basename, content) {
   return findings;
 }
 
-function collectJsonStrings(value, collected = []) {
+const MAX_JSON_DEPTH = 50;
+
+function collectJsonStrings(value, collected = [], depth = 0) {
+  if (depth > MAX_JSON_DEPTH) {
+    return collected;
+  }
+
   if (typeof value === "string") {
     collected.push(value);
     return collected;
@@ -109,24 +115,28 @@ function collectJsonStrings(value, collected = []) {
 
   if (Array.isArray(value)) {
     for (const item of value) {
-      collectJsonStrings(item, collected);
+      collectJsonStrings(item, collected, depth + 1);
     }
     return collected;
   }
 
   if (value && typeof value === "object") {
     for (const item of Object.values(value)) {
-      collectJsonStrings(item, collected);
+      collectJsonStrings(item, collected, depth + 1);
     }
   }
 
   return collected;
 }
 
-function collectJsonEntries(value, path = [], collected = []) {
+function collectJsonEntries(value, path = [], collected = [], depth = 0) {
+  if (depth > MAX_JSON_DEPTH) {
+    return collected;
+  }
+
   if (Array.isArray(value)) {
     for (let index = 0; index < value.length; index += 1) {
-      collectJsonEntries(value[index], [...path, String(index)], collected);
+      collectJsonEntries(value[index], [...path, String(index)], collected, depth + 1);
     }
     return collected;
   }
@@ -138,7 +148,7 @@ function collectJsonEntries(value, path = [], collected = []) {
   for (const [key, item] of Object.entries(value)) {
     const nextPath = [...path, key];
     collected.push({ key, value: item, path: nextPath });
-    collectJsonEntries(item, nextPath, collected);
+    collectJsonEntries(item, nextPath, collected, depth + 1);
   }
 
   return collected;
@@ -222,7 +232,8 @@ function isSecretLikeKey(key) {
   if (normalized === "tokenurl" || normalized === "authorizationurl") {
     return false;
   }
-  return /(api[_-]?key|token|secret|password|authorization)/i.test(String(key));
+  // Apply regex to normalized key so spaces/separators don't cause misses
+  return /(api_?key|apikey|token|secret|password|authorization)/i.test(normalized);
 }
 
 function isInlineSecretString(value) {

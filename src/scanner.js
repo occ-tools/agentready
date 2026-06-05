@@ -251,7 +251,8 @@ function dedupeFindings(findings) {
   const deduped = [];
 
   for (const finding of findings) {
-    const key = [finding.id, finding.file, finding.line, finding.evidence].join("|");
+    // Use unit separator (\x1f) to avoid collisions with pipe chars in paths
+    const key = [finding.id, finding.file, finding.line, finding.evidence].join("\x1f");
     if (seen.has(key)) {
       continue;
     }
@@ -263,9 +264,12 @@ function dedupeFindings(findings) {
 }
 
 function summarize(findings) {
-  return dedupeFindings(findings).reduce(
+  return findings.reduce(
     (summary, finding) => {
-      summary[finding.severity] += 1;
+      // Guard against unknown severity values to avoid NaN
+      if (Object.hasOwn(summary, finding.severity)) {
+        summary[finding.severity] += 1;
+      }
       return summary;
     },
     { high: 0, medium: 0, low: 0, info: 0 }

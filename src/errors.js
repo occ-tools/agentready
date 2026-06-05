@@ -3,6 +3,10 @@ export class AgentReadyError extends Error {
     super(message);
     this.name = "AgentReadyError";
     this.exitCode = exitCode;
+    // Remove the constructor frame from the stack trace when available
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, AgentReadyError);
+    }
   }
 }
 

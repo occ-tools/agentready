@@ -1,11 +1,16 @@
 export const SEVERITIES = ["high", "medium", "low", "info"];
 
 export const DEFAULT_IGNORED_DIRS = new Set([
+  ".cache",
   ".git",
+  ".gradle",
   ".hg",
-  ".svn",
+  ".mypy_cache",
   ".next",
   ".nuxt",
+  ".pytest_cache",
+  ".svn",
+  ".tox",
   ".turbo",
   ".venv",
   "__pycache__",
@@ -20,13 +25,18 @@ export const DEFAULT_IGNORED_DIRS = new Set([
 ]);
 
 export const TEXT_EXTENSIONS = new Set([
-  ".cjs",
   ".bash",
   ".bat",
+  ".cfg",
+  ".cjs",
   ".cmd",
   ".conf",
   ".env",
+  ".go",
+  ".hcl",
+  ".html",
   ".ini",
+  ".java",
   ".js",
   ".json",
   ".jsx",
@@ -36,11 +46,15 @@ export const TEXT_EXTENSIONS = new Set([
   ".ps1",
   ".py",
   ".rb",
+  ".rs",
   ".sh",
+  ".sql",
+  ".tf",
   ".toml",
   ".ts",
   ".tsx",
   ".txt",
+  ".xml",
   ".yaml",
   ".yml",
   ".zsh"
@@ -51,11 +65,20 @@ export const TEXT_FILE_NAMES = new Set([
   ".gitignore",
   ".npmignore",
   "Dockerfile",
+  "dockerfile",
   "Justfile",
   "Makefile",
+  "makefile",
   "Taskfile",
-  "dockerfile",
-  "makefile"
+  "Vagrantfile",
+  "Procfile",
+  "Brewfile",
+  "Rakefile",
+  ".bash_profile",
+  ".bashrc",
+  ".zshrc",
+  ".zprofile",
+  ".profile"
 ]);
 
 export const MAX_FILE_BYTES = 512 * 1024;

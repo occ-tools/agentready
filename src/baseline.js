@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { SEVERITIES } from "./constants.js";
 import { configError } from "./errors.js";
 
 export async function loadBaseline(root, baselinePath = null) {
@@ -176,7 +177,7 @@ export function summarizeBaselineDebt(baseline, now = new Date()) {
     generatedAt: baseline.generatedAt || null,
     entries: findings.length,
     severity: bySeverity,
-    oldestAgeDays: ages.length ? Math.max(...ages) : null,
+    oldestAgeDays: ages.length ? ages.reduce((max, age) => Math.max(max, age), 0) : null,
     averageAgeDays: ages.length ? Math.round(ages.reduce((total, age) => total + age, 0) / ages.length) : null,
     byRule: topCounts(byRule, 10),
     byFile: topCounts(byFile, 10),
@@ -218,7 +219,7 @@ function normalizeBaselineFindings(findings) {
     .map((finding) => ({
       fingerprint: finding.fingerprint,
       id: typeof finding.id === "string" ? finding.id : "unknown",
-      severity: typeof finding.severity === "string" ? finding.severity : "info",
+      severity: SEVERITIES.includes(finding.severity) ? finding.severity : "info",
       title: typeof finding.title === "string" ? finding.title : "Baseline finding",
       file: finding.file || null,
       line: finding.line || null,

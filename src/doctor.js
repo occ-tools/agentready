@@ -13,7 +13,7 @@ export async function runDoctor(root, options = {}) {
 
   checks.push({
     id: "doctor.node",
-    severity: process.versions.node.split(".")[0] >= 20 ? "info" : "medium",
+    severity: Number(process.versions.node.split(".")[0]) >= 20 ? "info" : "medium",
     title: "Node.js runtime",
     file: null,
     line: null,
@@ -49,6 +49,7 @@ export async function runDoctor(root, options = {}) {
     scannedAt: new Date().toISOString(),
     durationMs: result.durationMs,
     filesScanned: result.filesScanned,
+    filesSkipped: result.filesSkipped,
     config: result.config,
     configWarnings: result.configWarnings,
     baseline: result.baseline,
@@ -85,7 +86,10 @@ function findGitRoot(root) {
 function summarize(findings) {
   return findings.reduce(
     (summary, finding) => {
-      summary[finding.severity] += 1;
+      // Guard against unknown severity values to avoid NaN
+      if (Object.hasOwn(summary, finding.severity)) {
+        summary[finding.severity] += 1;
+      }
       return summary;
     },
     { high: 0, medium: 0, low: 0, info: 0 }

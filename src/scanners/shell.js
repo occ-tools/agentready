@@ -1,15 +1,26 @@
+import path from "node:path";
 import { redact, splitLines } from "./utils.js";
 
 const SHELL_LIKE_FILE_NAMES = new Set([
+  ".bash_profile",
+  ".bashrc",
+  ".profile",
+  ".zprofile",
+  ".zshrc",
+  "Brewfile",
   "Dockerfile",
+  "dockerfile",
   "Justfile",
   "Makefile",
-  "dockerfile",
-  "makefile"
+  "makefile",
+  "Procfile",
+  "Rakefile",
+  "Taskfile",
+  "Vagrantfile"
 ]);
 
 export function scanDangerousShell(relativePath, content) {
-  const basename = relativePath.split("/").pop();
+  const basename = path.basename(relativePath);
   if (!/\.(?:sh|ps1|bash|zsh|cmd|bat)$/i.test(relativePath) && !SHELL_LIKE_FILE_NAMES.has(basename)) {
     return [];
   }
@@ -47,7 +58,13 @@ export function scanDangerousCommandLines(relativePath, content, idPrefix) {
 export function classifyDangerousCommand(command) {
   const findings = [];
 
-  if (/\brm\s+-(?=[A-Za-z]*r)(?=[A-Za-z]*f)[A-Za-z]+\s+["']?(?:\/|\*|~|\$HOME|%USERPROFILE%)["']?/i.test(command)) {
+  // Detect recursive delete: rm -rf, rm -fr, rm -r -f, rm --recursive --force
+  // Covers combined flags (-rf, -fr), separated flags (-r -f), and long forms
+  if (
+    /\brm\s+(?:-[A-Za-z]*r[A-Za-z]*\s+-[A-Za-z]*f[A-Za-z]*|-[A-Za-z]*f[A-Za-z]*\s+-[A-Za-z]*r[A-Za-z]*|-(?=[A-Za-z]*r)(?=[A-Za-z]*f)[A-Za-z]+|--recursive\s+--force|--force\s+--recursive)/i.test(command) &&
+    /\brm\s+.+\s+["']?(?:\/|\*|~|\$(?:HOME|\{HOME\})|%USERPROFILE%|[A-Za-z]:[\\/])/i.test(command) ||
+    /\brm\s+(?:-[A-Za-z]*r[A-Za-z]*\s+-[A-Za-z]*f[A-Za-z]*|-[A-Za-z]*f[A-Za-z]*\s+-[A-Za-z]*r[A-Za-z]*|-(?=[A-Za-z]*r)(?=[A-Za-z]*f)[A-Za-z]+)\s+["']?(?:\/|\*|~|\$(?:HOME|\{HOME\})|%USERPROFILE%)/i.test(command)
+  ) {
     findings.push({
       id: "recursive_delete",
       severity: "high",
@@ -55,7 +72,11 @@ export function classifyDangerousCommand(command) {
     });
   }
 
-  if (/\b(curl|wget|iwr|Invoke-WebRequest)\b.+\|\s*(sh|bash|zsh|pwsh|powershell|iex|Invoke-Expression)\b/i.test(command)) {
+  // Detect remote download piped to shell (curl/wget | sh/bash) or process substitution bash <(curl ...)
+  if (
+    /\b(curl|wget|iwr|Invoke-WebRequest)\b.+\|\s*(sh|bash|zsh|pwsh|powershell|iex|Invoke-Expression)\b/i.test(command) ||
+    /\b(bash|sh|zsh)\s+<\s*\(\s*(curl|wget)\b/i.test(command)
+  ) {
     findings.push({
       id: "remote_code_execution",
       severity: "high",
@@ -63,7 +84,8 @@ export function classifyDangerousCommand(command) {
     });
   }
 
-  if (/\bchmod\s+-R\s+777\b/i.test(command)) {
+  // Detect world-writable permissions: chmod -R 777, chmod 777 -R, chmod --recursive 777, chmod -R a+rwx
+  if (/\bchmod\s+(?:-R\s+(?:777|0777|a\+rwx)|(?:777|0777|a\+rwx)\s+-R|--recursive\s+(?:777|0777|a\+rwx))/i.test(command)) {
     findings.push({
       id: "world_writable",
       severity: "medium",
@@ -71,6 +93,7 @@ export function classifyDangerousCommand(command) {
     });
   }
 
+  // Detect sudo usage (requires elevated privileges)
   if (/\bsudo\b/i.test(command)) {
     findings.push({
       id: "sudo",
