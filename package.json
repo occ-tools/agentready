@@ -1,6 +1,6 @@
 {
   "name": "agentready",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Preflight security scanner for AI coding agent access to software projects.",
   "type": "module",
   "bin": {
@@ -39,7 +39,15 @@
     "security",
     "claude",
     "codex",
-    "cli"
+    "cursor",
+    "cli",
+    "scanner",
+    "agent-security",
+    "agents-md",
+    "sarif",
+    "supply-chain",
+    "devtools",
+    "preflight"
   ],
   "homepage": "https://github.com/wangjiehu/agentready#readme",
   "repository": {

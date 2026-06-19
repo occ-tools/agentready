@@ -1,11 +1,15 @@
 # AgentReady
 
+[![npm version](https://img.shields.io/npm/v/agentready)](https://www.npmjs.com/package/agentready)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 Preflight security checks before you give Claude Code, Codex, Cursor, MCP
 tooling, or another AI coding agent access to a software project.
 
 ```bash
 npx agentready quickstart .
 npx agentready scan .
+npx agentready badge .
 ```
 
 AgentReady runs locally. It does not upload your code, findings, baseline, or
@@ -24,12 +28,14 @@ files.
 
 ## Capabilities
 
-- Implemented CLI commands: `scan`, `quickstart`, `init`, `doctor`, `baseline`,
-  `debt`, `config validate`, `list-rules`, and `version`
+- CLI commands: `scan`, `quickstart`, `init`, `doctor`, `baseline`,
+  `debt`, `badge`, `config validate`, `list-rules`, and `version`
+- Agent Readiness Score (0–100) with shields.io badge generation
 - Text, JSON, Markdown, and SARIF report output
 - GitHub composite action support through `action.yml`
 - Baseline support for reviewed legacy findings, including diff and prune
 - Report controls for PR-friendly grouping, summary-only output, and scan-size caps
+- Zero runtime dependencies — the scanner itself has no supply chain risk
 - Verified with `npm run market:check`, including tests, self-scan, config
   validation, npm package dry-run, tarball smoke, link checks, and public-surface
   cleanup checks
@@ -149,7 +155,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: wangjiehu/agentready@v0.1.0
+      - uses: wangjiehu/agentready@v1
         with:
           fail-on: medium
           format: sarif
@@ -183,6 +189,32 @@ Validate configuration:
 ```bash
 agentready config validate .
 ```
+
+## Agent Readiness Score
+
+AgentReady calculates a readiness score from 0 to 100 based on scan findings:
+
+```bash
+agentready badge .
+agentready badge . --format json
+agentready badge . --format markdown
+```
+
+```text
+Agent Readiness Score: 92/100 (ready)
+Badge URL: https://img.shields.io/badge/AgentReady-Score_92-brightgreen
+Markdown: ![AgentReady Score: 92](https://img.shields.io/badge/AgentReady-Score_92-brightgreen)
+```
+
+| Score | Grade | Meaning |
+|-------|-------|---------|
+| 90–100 | ready | Safe for agent access |
+| 70–89 | acceptable | Minor issues to address |
+| 50–69 | needs-work | Several risks require attention |
+| 30–49 | at-risk | Significant security gaps |
+| 0–29 | critical | Not safe for agent access |
+
+Add the badge to your project README to show agent readiness status.
 
 ## Output Formats
 

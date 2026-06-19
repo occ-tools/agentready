@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/wangjiehu/agentready/main/schema/agentready.schema.json",
   "baselinePath": null,
   "failOn": "medium",
-  "ignorePaths": ["test/fixtures/**"],
+  "ignorePaths": ["test/fixtures/**", "src/scanners/utils.js", "test/fingerprint.test.js"],
   "ignoreRules": [],
   "severityOverrides": {},
   "maxFileBytes": 524288

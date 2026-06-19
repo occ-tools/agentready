@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+## 1.0.0
+
+### Added
+
+- Agent Readiness Score (0–100) for quantified project health assessment.
+- `badge` command to generate shields.io badge URLs and Markdown embeds for README display.
+- `fixUrl` field on every rule linking to detailed remediation documentation.
+- Stripe, Google API, Slack, and JWT secret detection patterns.
+- Extended sensitive file scanning to 25+ file types.
+- Utility module (`src/utils.js`) consolidating shared functions.
+- New test suites for doctor, fingerprint, init, onboarding, utils, and score modules (143+ → 160+ tests).
+
+### Improved
+
+- Parallel directory traversal and batched file scanning (32-file concurrency) for faster scans.
+- Pre-compiled regex caching for secret and shell pattern matching.
+- Glob matching now supports `?` single-character wildcards.
+- Code deduplication: extracted `summarizeSeverities`, `sortFindings`, `escapeMarkdown`, and `escapeRegExp` into shared utilities.
+- Scanner no longer depends on reporters module, breaking circular coupling.
+- Expanded npm keywords for better search discoverability.
+
+### Fixed
+
+- Glob `?` wildcard patterns not being routed through glob-to-regexp conversion.
+- Version information caching for repeated CLI invocations.
+- Input validation for scan target existence.
+
 - Removed internal planning material from the product documentation package.
 - Refined generated agent ignore patterns so source files that discuss secret scanning are not hidden by broad filename globs.
 - Hardened the GitHub composite action input handling.

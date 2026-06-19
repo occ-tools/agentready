@@ -12,6 +12,7 @@ import { formatRules, RULE_CATALOG } from "./rules.js";
 import { scanProject } from "./scanner.js";
 import { SEVERITIES } from "./constants.js";
 import { sortFindings } from "./utils.js";
+import { calculateScore, formatBadgeUrl, formatBadgeMarkdown } from "./score.js";
 
 const HELP = `AgentReady - preflight security scanner for AI coding agents
 
@@ -41,6 +42,8 @@ Usage:
                     [--quiet] [--verbose] [--no-color]
   agentready config validate [path] [--config file]
   agentready list-rules [--format text|json|markdown] [--category name] [--severity level]
+  agentready badge [path] [--format text|json|markdown] [--config file]
+                   [--ignore-rule id] [--ignore-path pattern] [--max-file-size bytes]
   agentready version
   agentready help
 
@@ -58,6 +61,7 @@ Examples:
   agentready init . --preset balanced --with-ci
   agentready quickstart .
   agentready list-rules --category github-actions
+  agentready badge .
 `;
 
 export async function runCli(argv) {
@@ -110,6 +114,11 @@ export async function runCli(argv) {
 
   if (command === "config") {
     await handleConfig(rest);
+    return;
+  }
+
+  if (command === "badge") {
+    await handleBadge(rest);
     return;
   }
 
@@ -716,4 +725,37 @@ async function readVersion() {
   const parsed = JSON.parse(await readFile(packagePath, "utf8"));
   cachedVersion = parsed.version;
   return cachedVersion;
+}
+
+async function handleBadge(args) {
+  const options = parseOptions(args);
+  rejectUnsupportedOptions(options, ["format", "config", "ignore-rule", "ignore-path", "max-file-size"]);
+  const target = path.resolve(options.positionals[0] || process.cwd());
+  const format = options.format || "text";
+
+  if (!["text", "json", "markdown"].includes(format)) {
+    throw usageError(`Unsupported badge format "${format}". Use text, json, or markdown.`);
+  }
+
+  const loaded = await loadConfig(target, options.config);
+  const config = applyCliOverrides(loaded.config, options);
+
+  const result = await scanProject(target, {
+    config,
+    configWarnings: loaded.warnings
+  });
+
+  const { score, grade, color, deductions } = calculateScore(result.findings);
+  const badgeUrl = formatBadgeUrl(score, grade, color);
+  const badgeMarkdown = formatBadgeMarkdown(score, grade, color);
+
+  if (format === "json") {
+    console.log(JSON.stringify({ score, grade, color, deductions, badgeUrl, badgeMarkdown }, null, 2));
+  } else if (format === "markdown") {
+    console.log(badgeMarkdown);
+  } else {
+    console.log(`Agent Readiness Score: ${score}/100 (${grade})`);
+    console.log(`Badge URL: ${badgeUrl}`);
+    console.log(`Markdown: ${badgeMarkdown}`);
+  }
 }
