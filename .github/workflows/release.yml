@@ -51,5 +51,3 @@ jobs:
           NODE
       - run: npm run market:check
       - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

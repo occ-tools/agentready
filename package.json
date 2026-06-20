@@ -1,10 +1,10 @@
 {
   "name": "@wangjiehu/agentready",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Preflight security scanner for AI coding agent access to software projects.",
   "type": "module",
   "bin": {
-    "agentready": "./bin/agentready.js"
+    "agentready": "bin/agentready.js"
   },
   "files": [
     "bin/",

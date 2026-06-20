@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.0.1
+
+### Fixed
+
+- Fixed missing `agentready` binary in published npm package caused by Windows-style `./` path prefix in `bin` field.
+
 ## 1.0.0
 
 ### Added
